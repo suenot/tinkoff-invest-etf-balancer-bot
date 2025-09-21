@@ -11,7 +11,7 @@ import { configLoader } from '../configLoader';
 import { Wallet, Position, BalancingDataError } from '../types.d';
 import { sleep, writeFile, convertNumberToTinkoffNumber, convertTinkoffNumberToNumber } from '../utils';
 import { balancer } from '../balancer';
-import { buildDesiredWalletByMode } from '../balancer/desiredBuilder';
+import { buildDesiredWalletByMode, buildDesiredWalletWithDiff } from '../balancer/desiredBuilder';
 import { collectOnceForSymbols } from '../tools/pollEtfMetrics';
 import { normalizeTicker } from '../utils';
 
@@ -443,14 +443,22 @@ export const getPositionsCycle = async (options?: { runOnce?: boolean }) => {
       let desiredForRun;
       let modeUsed;
       let positionMetrics = [];
+      let diffApplied = false;
+      let diffInfo;
 
       try {
-        const desiredResult = await buildDesiredWalletByMode(accountConfig.desired_mode, accountConfig.desired_wallet);
+        // Use the new function that supports diff adjustment
+        const desiredResult = await buildDesiredWalletWithDiff(accountConfig);
         desiredForRun = desiredResult.wallet;
         modeUsed = desiredResult.modeApplied;
         positionMetrics = desiredResult.metrics;
+        diffApplied = desiredResult.diffApplied;
+        diffInfo = desiredResult.diffInfo;
         
         console.log(`\n📊 Successfully applied mode: ${modeUsed}`);
+        if (diffApplied && diffInfo) {
+          console.log(`\n🔄 Diff adjustment applied (mode: ${accountConfig.diff}, multiplier: ${diffInfo.appliedMultiplier}%)`);
+        }
         if (positionMetrics.length > 0) {
           console.log('\n📈 Position Metrics:');
           positionMetrics.forEach(metric => {

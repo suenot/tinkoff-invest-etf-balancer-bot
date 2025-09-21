@@ -96,6 +96,8 @@ export interface ExchangeClosureBehavior {
   update_iteration_result: boolean;
 }
 
+export type DiffMode = 'off' | 'iteration' | 'day';
+
 export interface AccountConfig {
   id: string;
   name: string;
@@ -116,6 +118,19 @@ export interface AccountConfig {
    * Default: undefined (feature disabled)
    */
   min_profit_percent_for_close_position?: number;
+  /**
+   * Controls how differences are calculated for portfolio rebalancing
+   * - off: Disable diff calculation (default)
+   * - iteration: Calculate differences between consecutive iterations
+   * - day: Calculate differences between current iteration and 00:00 of the same day
+   */
+  diff?: DiffMode;
+  /**
+   * Percentage factor that determines how strongly the diff should influence
+   * the desired portfolio allocation (0-100%)
+   * Default: 0 (no influence when diff is off)
+   */
+  diff_multiplier?: number;
 }
 
 export interface ProjectConfig {
@@ -179,4 +194,18 @@ export interface Ohlcv {
   volume: number;
   time: Date;
   isComplete: boolean;
+}
+
+export interface DiffSnapshot {
+  timestamp: string;
+  desiredWallet: DesiredWallet;
+  mode: DesiredMode;
+}
+
+export interface DiffData {
+  date: string;
+  accountId: string;
+  snapshots: {
+    [key: string]: DesiredWallet; // key is either "00:00" or "iteration_N"
+  };
 }

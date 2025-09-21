@@ -40,7 +40,13 @@
         },
         "min_buy_rebalance_percent": 0.10
       },
-      "min_profit_percent_for_close_position": 5
+      "min_profit_percent_for_close_position": 5,
+      "diff": "off",
+      "diff_multiplier": 0
     }
-  ]
+  ],
+  "_comments": {
+    "diff": "Controls diff calculation mode: 'off' (disabled), 'iteration' (diff between consecutive iterations), 'day' (diff from 00:00)",
+    "diff_multiplier": "Percentage (0-100) of how strongly the diff should influence portfolio allocation. 0 = no influence, 100 = full influence"
+  }
 }
