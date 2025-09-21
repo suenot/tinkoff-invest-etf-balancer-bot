@@ -24,36 +24,14 @@ import { dailyAggregator } from '../dailyAggregator';
 
 const debugProvider = debug('bot').extend('provider');
 
-// Функция для получения конфигурации аккаунта
-const getAccountConfig = () => {
-  // Берем первый аккаунт из конфига
-  const accounts = configLoader.getAllAccounts();
-
-  if (!accounts || accounts.length === 0) {
-    throw new Error('No accounts found in CONFIG.json');
+// Helper function to get account config by ID
+const getAccountConfigById = (accountId: string) => {
+  const account = configLoader.getAccountById(accountId);
+  if (!account) {
+    throw new Error(`Account with id '${accountId}' not found in CONFIG.json`);
   }
-
-  return accounts[0];
+  return account;
 };
-
-// Получаем конфигурацию аккаунта на уровне модуля
-const accountConfig = getAccountConfig();
-
-// Получаем токен из конфигурации аккаунта
-const getTokenForAccount = () => {
-  const token = configLoader.getAccountToken(accountConfig.id);
-  if (!token) {
-    // Fallback на основной токен
-    const fallbackToken = process.env.T_INVEST_TOKEN;
-    if (!fallbackToken) {
-      throw new Error(`No token found for account ${accountConfig.id}. Please set token in CONFIG.json or T_INVEST_TOKEN in .env`);
-    }
-    return fallbackToken;
-  }
-  return token;
-};
-
-const { orders, operations, marketData, users, instruments } = createSdk(getTokenForAccount());
 
 /**
  * Filters out frozen (blocked) assets from the wallet
@@ -105,17 +83,33 @@ const calculatePortfolioShares = (wallet: Wallet, includeBlocked: boolean = fals
 
 let ACCOUNT_ID: string;
 
-export const provider = async (options?: { runOnce?: boolean }) => {
-  // Используем account_id из конфигурации аккаунта
-  ACCOUNT_ID = await getAccountId(accountConfig.account_id);
-  await getInstruments();
-  await getPositionsCycle(options);
+export const provider = async (options?: { runOnce?: boolean; accountId?: string }) => {
+  // Get account config for current execution context
+  const accountId = options?.accountId || process.env.ACCOUNT_ID || '0';
+  const accountConfig = getAccountConfigById(accountId);
+
+  debugProvider(`Processing account: ${accountConfig.name} (${accountConfig.id})`);
+
+  // Get token for this specific account
+  const token = configLoader.getAccountToken(accountConfig.id);
+  const finalToken = token || process.env.T_INVEST_TOKEN;
+  if (!finalToken) {
+    throw new Error(`No token found for account ${accountConfig.id}. Please set token in CONFIG.json or T_INVEST_TOKEN in .env`);
+  }
+
+  // Create SDK with account-specific token
+  const { orders, operations, marketData, users, instruments } = createSdk(finalToken);
+
+  // Use account_id from account configuration
+  ACCOUNT_ID = await getAccountId(accountConfig.account_id, users);
+  await getInstruments(instruments, accountConfig);
+  await getPositionsCycle(options, accountConfig, { orders, operations, marketData, instruments });
 };
 
-export const generateOrders = async (wallet: Wallet) => {
+export const generateOrders = async (wallet: Wallet, accountConfig?: any, sdkObjects?: any) => {
   debugProvider('generateOrders');
   for (const position of wallet) {
-    await generateOrder(position);
+    await generateOrder(position, accountConfig, sdkObjects);
   }
 };
 
@@ -124,9 +118,11 @@ export const generateOrders = async (wallet: Wallet) => {
  * Ensures sell orders complete before non-margin buy orders are executed
  */
 export const generateOrdersSequential = async (
-  sellsFirst: Position[], 
-  buysNonMarginFirst: Position[], 
-  remainingOrders: Position[]
+  sellsFirst: Position[],
+  buysNonMarginFirst: Position[],
+  remainingOrders: Position[],
+  accountConfig?: any,
+  sdkObjects?: any
 ) => {
   debugProvider('generateOrdersSequential - executing in phases for buy_requires_total_marginal_sell');
   
@@ -135,7 +131,7 @@ export const generateOrdersSequential = async (
     debugProvider(`🔄 PHASE 1: Executing ${sellsFirst.length} sell orders to raise funds`);
     for (const position of sellsFirst) {
       debugProvider(`💰 Executing sell order: ${Math.abs(position.toBuyLots || 0)} lots of ${position.base}`);
-      await generateOrder(position);
+      await generateOrder(position, accountConfig, sdkObjects);
     }
     
     // Additional wait time for sell orders to complete and funds to become available
@@ -148,7 +144,7 @@ export const generateOrdersSequential = async (
     debugProvider(`🔄 PHASE 2: Executing ${buysNonMarginFirst.length} non-margin buy orders with raised funds`);
     for (const position of buysNonMarginFirst) {
       debugProvider(`💰 Executing non-margin buy order: ${Math.abs(position.toBuyLots || 0)} lots of ${position.base}`);
-      await generateOrder(position);
+      await generateOrder(position, accountConfig, sdkObjects);
     }
   }
   
@@ -156,14 +152,14 @@ export const generateOrdersSequential = async (
   if (remainingOrders.length > 0) {
     debugProvider(`🔄 PHASE 3: Executing ${remainingOrders.length} remaining orders`);
     for (const position of remainingOrders) {
-      await generateOrder(position);
+      await generateOrder(position, accountConfig, sdkObjects);
     }
   }
   
   debugProvider('✅ Sequential order execution completed');
 };
 
-export const generateOrder = async (position: Position) => {
+export const generateOrder = async (position: Position, accountConfig?: any, sdkObjects?: any) => {
   debugProvider('generateOrder');
   debugProvider('position', position);
 
@@ -249,6 +245,12 @@ export const generateOrder = async (position: Position) => {
   };
   debugProvider('Sending market order', order);
 
+  const { orders } = sdkObjects || {};
+  if (!orders) {
+    debugProvider('orders SDK object not provided, skipping order');
+    return 0;
+  }
+
   try {
     const setOrder = await orders.postOrder(order);
     debugProvider('Successfully placed order', setOrder);
@@ -277,11 +279,11 @@ export const generateOrder = async (position: Position) => {
     debugProvider(err);
     // console.trace(err);
   }
-  await sleep(accountConfig.sleep_between_orders);
+  await sleep(accountConfig?.sleep_between_orders || 1000);
 
 };
 
-export const getAccountId = async (type: any) => {
+export const getAccountId = async (type: any, users?: any) => {
   // Поддержка индекса: '3' или 'INDEX:3'
   const indexMatch = typeof type === 'string' && type.startsWith('INDEX:')
     ? Number(type.split(':')[1])
@@ -337,17 +339,17 @@ export const getAccountId = async (type: any) => {
   return type;
 };
 
-export const getPositionsCycle = async (options?: { runOnce?: boolean }) => {
+export const getPositionsCycle = async (options?: { runOnce?: boolean }, accountConfig?: any, sdkObjects?: any) => {
   return await new Promise<void>((resolve) => {
     let count = 1;
 
     const tick = async () => {
       // Before starting iteration, check if exchange is open (MOEX) and handle according to configuration
       let isExchangeOpen = true;
-      let exchangeClosureBehavior = accountConfig.exchange_closure_behavior;
+      let exchangeClosureBehavior = accountConfig?.exchange_closure_behavior || { mode: 'skip_iteration', update_iteration_result: false };
       
       try {
-        isExchangeOpen = await isExchangeOpenNow('MOEX');
+        isExchangeOpen = await isExchangeOpenNow('MOEX', sdkObjects?.instruments);
         if (!isExchangeOpen) {
           debugProvider(`Exchange closed (MOEX). Behavior mode: ${exchangeClosureBehavior.mode}`);
           
@@ -390,6 +392,10 @@ export const getPositionsCycle = async (options?: { runOnce?: boolean }) => {
       try {
         debugProvider('Getting portfolio and positions simultaneously');
         // Минимизируем временной зазор между вызовами для предотвращения race condition
+        const { operations } = sdkObjects || {};
+        if (!operations) {
+          throw new Error('operations SDK object not provided');
+        }
         [portfolio, positions] = await Promise.all([
           operations.getPortfolio({ accountId: ACCOUNT_ID }),
           operations.getPositions({ accountId: ACCOUNT_ID })
@@ -444,7 +450,7 @@ export const getPositionsCycle = async (options?: { runOnce?: boolean }) => {
           continue;
         }
 
-        const priceWhenAddToWallet = await getLastPrice(instrument.figi);
+        const priceWhenAddToWallet = await getLastPrice(instrument.figi, sdkObjects?.marketData, accountConfig);
         debugProvider('priceWhenAddToWallet', priceWhenAddToWallet);
 
         const amount = convertTinkoffNumberToNumber(position.quantity);
@@ -508,7 +514,7 @@ export const getPositionsCycle = async (options?: { runOnce?: boolean }) => {
 
       // Before calculating desired weights, we can collect fresh metrics for needed tickers
       try {
-        const tickers = Object.keys(accountConfig.desired_wallet);
+        const tickers = Object.keys(accountConfig?.desired_wallet || {});
         await collectOnceForSymbols(tickers);
       } catch (e) {
         // eslint-disable-next-line no-console
@@ -582,7 +588,7 @@ export const getPositionsCycle = async (options?: { runOnce?: boolean }) => {
       // Determine if we should run in dry-run mode
       const shouldRunDryRun = !isExchangeOpen && exchangeClosureBehavior.mode === 'dry_run';
       
-      const enhancedResult = await balancer(coreWallet, desiredForRun, positionMetrics, modeUsed, shouldRunDryRun);
+      const enhancedResult = await balancer(coreWallet, desiredForRun, positionMetrics, modeUsed, shouldRunDryRun, accountConfig, sdkObjects);
       const { finalPercents, marginInfo } = enhancedResult;
       
       // 🔍 DIAGNOSIS: Orders executed, but coreWallet NOT updated!
@@ -618,8 +624,12 @@ export const getPositionsCycle = async (options?: { runOnce?: boolean }) => {
       
       try {
         // Get fresh portfolio data to see real state after orders
-        const freshPortfolio = await operations.getPortfolio({ accountId: ACCOUNT_ID });
-        const freshPositions = await operations.getPositions({ accountId: ACCOUNT_ID });
+        const { operations: ops } = sdkObjects || {};
+        if (!ops) {
+          throw new Error('operations SDK object not available for fresh data fetch');
+        }
+        const freshPortfolio = await ops.getPortfolio({ accountId: ACCOUNT_ID });
+        const freshPositions = await ops.getPositions({ accountId: ACCOUNT_ID });
         
         // Create fresh wallet to compare with old one
         const tempFreshWallet: Wallet = [];
@@ -712,8 +722,8 @@ export const getPositionsCycle = async (options?: { runOnce?: boolean }) => {
       }
 
       // Detailed balancing result output
-      console.log('\n🎯 BALANCING RESULT:');
-      console.log(`Mode used: ${modeUsed || accountConfig.desired_mode}`);
+      console.log(`\n🎯 BALANCING RESULT FOR ACCOUNT: ${accountConfig?.name || 'Unknown'} (${accountConfig?.id || 'Unknown'})`);
+      console.log(`Mode used: ${modeUsed || accountConfig?.desired_mode || 'manual'}`);
       console.log('Format: TICKER: diff: before% -> after% (target%)');
       console.log('Where: before% = current share, after% = actual share after balancing, (target%) = target from balancer, diff = change in percentage points\n');
 
@@ -805,7 +815,7 @@ export const getPositionsCycle = async (options?: { runOnce?: boolean }) => {
     // Немедленный первый запуск для отладки, затем по интервалу
     tick();
     if (!options?.runOnce) {
-      setInterval(tick, accountConfig.balance_interval);
+      setInterval(tick, accountConfig?.balance_interval || 3600000);
     }
   });
 };
@@ -826,7 +836,7 @@ const toDate = (t: any): Date | null => {
 };
 
 // Проверяет, открыта ли указанная биржа прямо сейчас по расписанию торгов
-export const isExchangeOpenNow = async (exchange: string = 'MOEX'): Promise<boolean> => {
+export const isExchangeOpenNow = async (exchange: string = 'MOEX', instruments?: any): Promise<boolean> => {
   try {
     const now = new Date();
     const from = new Date(now); // Use current time as 'from' parameter
@@ -835,6 +845,11 @@ export const isExchangeOpenNow = async (exchange: string = 'MOEX'): Promise<bool
 
     debugProvider(`Checking trading schedule for ${exchange}. Current time: ${now.toISOString()}`);
     debugProvider(`Request params: from=${from.toISOString()}, to=${to.toISOString()}`);
+
+    if (!instruments) {
+      debugProvider('instruments SDK object not provided, assuming exchange is open');
+      return true;
+    }
 
     const schedules: any = await instruments.tradingSchedules({
       exchange,
@@ -889,8 +904,12 @@ export const isExchangeOpenNow = async (exchange: string = 'MOEX'): Promise<bool
   }
 };
 
-export const getLastPrice = async (figi: any) => {
+export const getLastPrice = async (figi: any, marketData?: any, accountConfig?: any) => {
   debugProvider('Getting last price');
+  if (!marketData) {
+    debugProvider('marketData SDK object not provided');
+    return null;
+  }
   let lastPriceResult;
   try {
     lastPriceResult = await marketData.getLastPrices({
@@ -903,11 +922,15 @@ export const getLastPrice = async (figi: any) => {
 
   const lastPrice = lastPriceResult?.lastPrices?.[0]?.price;
   debugProvider('lastPrice', lastPrice);
-  await sleep(accountConfig.sleep_between_orders);
+  await sleep(accountConfig?.sleep_between_orders || 1000);
   return lastPrice;
 };
 
-export const getInstruments = async () => {
+export const getInstruments = async (instruments?: any, accountConfig?: any) => {
+  if (!instruments) {
+    debugProvider('instruments SDK object not provided');
+    return;
+  }
 
   debugProvider('Getting shares list');
   let sharesResult;
@@ -921,7 +944,7 @@ export const getInstruments = async () => {
   const shares = sharesResult?.instruments;
   debugProvider('shares count', shares?.length);
   (global as any).INSTRUMENTS = _.union(shares, (global as any).INSTRUMENTS);
-  await sleep(accountConfig.sleep_between_orders);
+  await sleep(accountConfig?.sleep_between_orders || 1000);
 
   debugProvider('Getting ETFs list');
   let etfsResult;
@@ -935,7 +958,7 @@ export const getInstruments = async () => {
   const etfs = etfsResult?.instruments;
   debugProvider('etfs count', etfs?.length);
   (global as any).INSTRUMENTS = _.union(etfs, (global as any).INSTRUMENTS);
-  await sleep(accountConfig.sleep_between_orders);
+  await sleep(accountConfig?.sleep_between_orders || 1000);
 
   debugProvider('Getting bonds list');
   let bondsResult;
@@ -949,7 +972,7 @@ export const getInstruments = async () => {
   const bonds = bondsResult?.instruments;
   debugProvider('bonds count', bonds?.length);
   (global as any).INSTRUMENTS = _.union(bonds, (global as any).INSTRUMENTS);
-  await sleep(accountConfig.sleep_between_orders);
+  await sleep(accountConfig?.sleep_between_orders || 1000);
 
   debugProvider('Getting currencies list');
   let currenciesResult;
@@ -963,7 +986,7 @@ export const getInstruments = async () => {
   const currencies = currenciesResult?.instruments;
   debugProvider('currencies count', currencies?.length);
   (global as any).INSTRUMENTS = _.union(currencies, (global as any).INSTRUMENTS);
-  await sleep(accountConfig.sleep_between_orders);
+  await sleep(accountConfig?.sleep_between_orders || 1000);
 
   debugProvider('Getting futures list');
   let futuresResult;
@@ -977,12 +1000,16 @@ export const getInstruments = async () => {
   const futures = futuresResult?.instruments;
   debugProvider('futures count', futures?.length);
   (global as any).INSTRUMENTS = _.union(futures, (global as any).INSTRUMENTS);
-  await sleep(accountConfig.sleep_between_orders);
+  await sleep(accountConfig?.sleep_between_orders || 1000);
 
   debugProvider('=========================');
 };
 
-export const getLastPrices = async () => {
+export const getLastPrices = async (marketData?: any) => {
+  if (!marketData) {
+    debugProvider('marketData SDK object not provided');
+    return;
+  }
   const lastPrices = (await marketData.getLastPrices({
     figi: [],
   }))?.lastPrices;

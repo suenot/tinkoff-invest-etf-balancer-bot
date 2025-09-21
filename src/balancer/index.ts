@@ -289,7 +289,9 @@ export const balancer = async (
   desiredWallet: DesiredWallet,
   positionMetrics: PositionMetrics[] = [],
   modeUsed: string = 'manual',
-  dryRun: boolean = false
+  dryRun: boolean = false,
+  accountConfig?: any,
+  sdkObjects?: any
 ): Promise<EnhancedBalancerResult> => {
 
   const walletInfo = {
@@ -728,10 +730,10 @@ export const balancer = async (
     if (allSells.length > 0 || priorityBuys.length > 0) {
       debug('🔄 Using SEQUENTIAL execution - sells first, then buys (fixed logic)');
       debug(`Sequential phases: ${allSells.length} total sells, ${priorityBuys.length} priority buys, ${remainingBuys.length} remaining buys`);
-      await generateOrdersSequential(allSellsSorted, priorityBuysSorted, remainingBuysSorted);
+      await generateOrdersSequential(allSellsSorted, priorityBuysSorted, remainingBuysSorted, accountConfig, sdkObjects);
     } else {
       debug('No sells or priority buys needed, executing remaining buys only');
-      await generateOrders(remainingBuysSorted);
+      await generateOrders(remainingBuysSorted, accountConfig, sdkObjects);
     }
   } else {
     debug('Dry-run mode: Skipping order generation. Orders that would be placed:', ordersPlanned.length);
