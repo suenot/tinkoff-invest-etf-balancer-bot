@@ -27,6 +27,8 @@ export interface Position {
   toBuyNumber?: number;
   averagePositionPriceFifoNumber?: number;
   averagePositionPriceNumber?: number;
+  blocked?: boolean; // Indicates if the position is frozen/blocked
+  blockedLots?: number; // Number of lots that are blocked
 }
 
 export type Wallet = Position[];
