@@ -44,7 +44,19 @@ const main = async () => {
     return;
   }
   const runOnce = process.argv.includes('--once');
-  await provider({ runOnce });
+  const accounts = configLoader.getAllAccounts();
+
+  console.log(`🔄 Processing ${accounts.length} account(s)`);
+
+  // Process each account
+  for (const account of accounts) {
+    console.log(`\n=== Processing Account: ${account.name} (${account.id}) ===`);
+    // Pass account ID through environment variable for provider to use
+    process.env.ACCOUNT_ID = account.id;
+    await provider({ runOnce, accountId: account.id });
+  }
+
+  console.log('\n✅ All accounts processed successfully');
   // TODO: currently balancer is called from provider, not from main. Need to refactor.
   // debugMain('provider done');
   // await balancer((global as any).POSITIONS, DESIRED_WALLET);
