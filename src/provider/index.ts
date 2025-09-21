@@ -11,9 +11,12 @@ import { configLoader } from '../configLoader';
 import { Wallet, Position, BalancingDataError } from '../types.d';
 import { sleep, writeFile, convertNumberToTinkoffNumber, convertTinkoffNumberToNumber } from '../utils';
 import { balancer } from '../balancer';
-import { buildDesiredWalletByMode } from '../balancer/desiredBuilder';
+import { buildDesiredWalletByMode, buildDesiredWalletWithDiff } from '../balancer/desiredBuilder';
 import { collectOnceForSymbols } from '../tools/pollEtfMetrics';
 import { normalizeTicker } from '../utils';
+import { expenseTracker, ExpenseRecord } from '../expenseTracker';
+import { ProfitCalculator } from '../profitCalculator';
+import { dailyAggregator } from '../dailyAggregator';
 
 (global as any).INSTRUMENTS = [];
 (global as any).POSITIONS = [];
@@ -31,17 +34,43 @@ const getAccountConfigById = (accountId: string) => {
 };
 
 /**
+ * Filters out frozen (blocked) assets from the wallet
+ * @param wallet - array of portfolio positions
+ * @returns wallet with only available (non-frozen) assets
+ */
+const filterFrozenAssets = (wallet: Wallet): Wallet => {
+  return wallet.filter(position => !position.blocked);
+};
+
+/**
+ * Calculates the total value of available (non-frozen) assets
+ * @param wallet - array of portfolio positions
+ * @returns total value of available assets in RUB
+ */
+const calculateAvailablePortfolioValue = (wallet: Wallet): number => {
+  const availableWallet = filterFrozenAssets(wallet);
+  return _.sumBy(availableWallet, 'totalPriceNumber');
+};
+
+/**
  * Рассчитывает доли каждого инструмента в портфеле
  * @param wallet - массив позиций портфеля
+ * @param includeBlocked - включать заблокированные позиции в расчет (по умолчанию false)
  * @returns объект с тикерами и их долями в процентах
  */
-const calculatePortfolioShares = (wallet: Wallet): Record<string, number> => {
+const calculatePortfolioShares = (wallet: Wallet, includeBlocked: boolean = false): Record<string, number> => {
   // Исключаем валюты (позиции где base === quote)
-  const securities = wallet.filter(p => p.base !== p.quote);
+  let securities = wallet.filter(p => p.base !== p.quote);
+
+  // Filter out frozen assets unless explicitly requested to include them
+  if (!includeBlocked) {
+    securities = filterFrozenAssets(securities);
+  }
+
   const totalValue = _.sumBy(securities, 'totalPriceNumber');
-  
+
   if (totalValue <= 0) return {};
-  
+
   const shares: Record<string, number> = {};
   for (const position of securities) {
     if (position.base && position.totalPriceNumber) {
@@ -225,6 +254,26 @@ export const generateOrder = async (position: Position, accountConfig?: any, sdk
   try {
     const setOrder = await orders.postOrder(order);
     debugProvider('Successfully placed order', setOrder);
+
+    // Track commission expense
+    if (setOrder) {
+      // Calculate commission (standard Tinkoff commission is 0.3% for market orders)
+      const orderAmount = quantityLots * (position.lotSize || 1) * (position.priceNumber || 0);
+      const commission = orderAmount * 0.003; // 0.3% commission
+
+      const expenseRecord: ExpenseRecord = {
+        orderId: order.orderId,
+        ticker: position.base || '',
+        orderType: direction === OrderDirection.ORDER_DIRECTION_BUY ? 'BUY' : 'SELL',
+        lots: quantityLots,
+        amountRub: orderAmount,
+        commission: commission,
+        timestamp: new Date()
+      };
+
+      expenseTracker.addExpense(expenseRecord);
+      debugProvider(`Tracked commission: ${commission.toFixed(2)} RUB for ${position.base}`);
+    }
   } catch (err) {
     debugProvider('Error placing order');
     debugProvider(err);
@@ -430,12 +479,38 @@ export const getPositionsCycle = async (options?: { runOnce?: boolean }, account
           totalPriceNumber: totalPriceNumber,
           averagePositionPriceFifoNumber: averagePositionPriceFifoNumber,
           averagePositionPriceNumber: averagePositionPriceNumber,
+          blocked: position.blocked === true, // Check if position is blocked/frozen
+          blockedLots: position.blockedLots || 0, // Number of blocked lots
         };
         debugProvider('corePosition', corePosition);
         coreWallet.push(corePosition);
       }
 
       debugProvider(coreWallet);
+
+      // Report frozen assets if any are detected
+      const frozenAssets = coreWallet.filter(position => position.blocked);
+      if (frozenAssets.length > 0) {
+        const totalPortfolioValue = _.sumBy(coreWallet.filter(p => p.base !== p.quote), 'totalPriceNumber');
+        const frozenValue = _.sumBy(frozenAssets, 'totalPriceNumber');
+        const frozenPercentage = totalPortfolioValue > 0 ? (frozenValue / totalPortfolioValue) * 100 : 0;
+        const availableValue = totalPortfolioValue - frozenValue;
+        const availablePercentage = 100 - frozenPercentage;
+
+        console.log('\n❄️  FROZEN ASSETS DETECTED:');
+        frozenAssets.forEach(asset => {
+          if (asset.base && asset.base !== asset.quote) {
+            console.log(`   - ${asset.base}: ${asset.amount || 0} units (${asset.blockedLots || 0} lots blocked) - Value: ${(asset.totalPriceNumber || 0).toFixed(2)} RUB`);
+          }
+        });
+        console.log(`   Total Frozen Value: ${frozenValue.toFixed(2)} RUB (${frozenPercentage.toFixed(1)}% of portfolio)`);
+        console.log(`   Available for Trading: ${availableValue.toFixed(2)} RUB (${availablePercentage.toFixed(1)}% of portfolio)`);
+
+        if (frozenPercentage > 25) {
+          console.log(`\n⚠️  WARNING: ${frozenPercentage.toFixed(1)}% of your portfolio is frozen and unavailable for trading`);
+        }
+        console.log('');
+      }
 
       // Before calculating desired weights, we can collect fresh metrics for needed tickers
       try {
@@ -449,14 +524,22 @@ export const getPositionsCycle = async (options?: { runOnce?: boolean }, account
       let desiredForRun;
       let modeUsed;
       let positionMetrics = [];
+      let diffApplied = false;
+      let diffInfo;
 
       try {
-        const desiredResult = await buildDesiredWalletByMode(accountConfig?.desired_mode || 'manual', accountConfig?.desired_wallet || {});
+        // Use the new function that supports diff adjustment
+        const desiredResult = await buildDesiredWalletWithDiff(accountConfig);
         desiredForRun = desiredResult.wallet;
         modeUsed = desiredResult.modeApplied;
         positionMetrics = desiredResult.metrics;
+        diffApplied = desiredResult.diffApplied;
+        diffInfo = desiredResult.diffInfo;
         
         console.log(`\n📊 Successfully applied mode: ${modeUsed}`);
+        if (diffApplied && diffInfo) {
+          console.log(`\n🔄 Diff adjustment applied (mode: ${accountConfig.diff}, multiplier: ${diffInfo.appliedMultiplier}%)`);
+        }
         if (positionMetrics.length > 0) {
           console.log('\n📈 Position Metrics:');
           positionMetrics.forEach(metric => {
@@ -597,6 +680,8 @@ export const getPositionsCycle = async (options?: { runOnce?: boolean }, account
               totalPriceNumber: totalPriceNumber,
               averagePositionPriceFifoNumber: averagePositionPriceFifoNumber,
               averagePositionPriceNumber: averagePositionPriceNumber,
+              blocked: position.blocked === true, // Check if position is blocked/frozen
+              blockedLots: position.blockedLots || 0, // Number of blocked lots
             });
           }
         }
@@ -687,10 +772,30 @@ export const getPositionsCycle = async (options?: { runOnce?: boolean }, account
         const rubAbs = Math.abs(rubBalance);
         console.log(`RUR: ${rubSign}${rubAbs.toFixed(2)} RUB`);
       }
-      
+
+      // Calculate and display profit/loss information
+      const profitCalculator = new ProfitCalculator();
+      const profitSummary = profitCalculator.calculateProfit(freshCoreWallet);
+
+      // Get expense information for this iteration
+      const expenseSummary = expenseTracker.getIterationExpenses();
+
+      // Add to daily aggregator
+      dailyAggregator.addIterationData(profitSummary, expenseSummary);
+
+      // Display profit/loss and expense summaries
+      console.log('\n' + profitCalculator.formatProfitSummary(profitSummary));
+      console.log('\n' + expenseTracker.formatExpenseSummary(expenseSummary));
+
+      // Display daily summary
+      console.log(dailyAggregator.formatDailySummary());
+
+      // Clear iteration expenses for next iteration
+      expenseTracker.clearIterationExpenses();
+
       // Handle iteration result updates based on exchange closure behavior
       const shouldUpdateIterationResult = isExchangeOpen || exchangeClosureBehavior.update_iteration_result;
-      
+
       if (shouldUpdateIterationResult) {
         debugProvider(`ITERATION #${count} FINISHED. TIME: ${new Date()}`);
         // Additional iteration result logging/metrics can be added here

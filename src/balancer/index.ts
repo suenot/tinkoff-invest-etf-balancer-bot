@@ -298,7 +298,14 @@ export const balancer = async (
     remains: 0,
   };
 
-  const wallet = positions;
+  // Filter out frozen assets before processing
+  const wallet = positions.filter(position => !position.blocked);
+
+  // Log if any assets were filtered out
+  const frozenAssets = positions.filter(position => position.blocked);
+  if (frozenAssets.length > 0) {
+    debug('Filtered out frozen assets:', frozenAssets.map(p => `${p.base}: ${p.blockedLots} lots`));
+  }
 
   // Get current account configuration
   const accountConfig = getAccountConfig();
