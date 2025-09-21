@@ -53,17 +53,43 @@ const getTokenForAccount = () => {
 const { orders, operations, marketData, users, instruments } = createSdk(getTokenForAccount());
 
 /**
+ * Filters out frozen (blocked) assets from the wallet
+ * @param wallet - array of portfolio positions
+ * @returns wallet with only available (non-frozen) assets
+ */
+const filterFrozenAssets = (wallet: Wallet): Wallet => {
+  return wallet.filter(position => !position.blocked);
+};
+
+/**
+ * Calculates the total value of available (non-frozen) assets
+ * @param wallet - array of portfolio positions
+ * @returns total value of available assets in RUB
+ */
+const calculateAvailablePortfolioValue = (wallet: Wallet): number => {
+  const availableWallet = filterFrozenAssets(wallet);
+  return _.sumBy(availableWallet, 'totalPriceNumber');
+};
+
+/**
  * Рассчитывает доли каждого инструмента в портфеле
  * @param wallet - массив позиций портфеля
+ * @param includeBlocked - включать заблокированные позиции в расчет (по умолчанию false)
  * @returns объект с тикерами и их долями в процентах
  */
-const calculatePortfolioShares = (wallet: Wallet): Record<string, number> => {
+const calculatePortfolioShares = (wallet: Wallet, includeBlocked: boolean = false): Record<string, number> => {
   // Исключаем валюты (позиции где base === quote)
-  const securities = wallet.filter(p => p.base !== p.quote);
+  let securities = wallet.filter(p => p.base !== p.quote);
+
+  // Filter out frozen assets unless explicitly requested to include them
+  if (!includeBlocked) {
+    securities = filterFrozenAssets(securities);
+  }
+
   const totalValue = _.sumBy(securities, 'totalPriceNumber');
-  
+
   if (totalValue <= 0) return {};
-  
+
   const shares: Record<string, number> = {};
   for (const position of securities) {
     if (position.base && position.totalPriceNumber) {
@@ -424,12 +450,38 @@ export const getPositionsCycle = async (options?: { runOnce?: boolean }) => {
           totalPriceNumber: totalPriceNumber,
           averagePositionPriceFifoNumber: averagePositionPriceFifoNumber,
           averagePositionPriceNumber: averagePositionPriceNumber,
+          blocked: position.blocked === true, // Check if position is blocked/frozen
+          blockedLots: position.blockedLots || 0, // Number of blocked lots
         };
         debugProvider('corePosition', corePosition);
         coreWallet.push(corePosition);
       }
 
       debugProvider(coreWallet);
+
+      // Report frozen assets if any are detected
+      const frozenAssets = coreWallet.filter(position => position.blocked);
+      if (frozenAssets.length > 0) {
+        const totalPortfolioValue = _.sumBy(coreWallet.filter(p => p.base !== p.quote), 'totalPriceNumber');
+        const frozenValue = _.sumBy(frozenAssets, 'totalPriceNumber');
+        const frozenPercentage = totalPortfolioValue > 0 ? (frozenValue / totalPortfolioValue) * 100 : 0;
+        const availableValue = totalPortfolioValue - frozenValue;
+        const availablePercentage = 100 - frozenPercentage;
+
+        console.log('\n❄️  FROZEN ASSETS DETECTED:');
+        frozenAssets.forEach(asset => {
+          if (asset.base && asset.base !== asset.quote) {
+            console.log(`   - ${asset.base}: ${asset.amount || 0} units (${asset.blockedLots || 0} lots blocked) - Value: ${(asset.totalPriceNumber || 0).toFixed(2)} RUB`);
+          }
+        });
+        console.log(`   Total Frozen Value: ${frozenValue.toFixed(2)} RUB (${frozenPercentage.toFixed(1)}% of portfolio)`);
+        console.log(`   Available for Trading: ${availableValue.toFixed(2)} RUB (${availablePercentage.toFixed(1)}% of portfolio)`);
+
+        if (frozenPercentage > 25) {
+          console.log(`\n⚠️  WARNING: ${frozenPercentage.toFixed(1)}% of your portfolio is frozen and unavailable for trading`);
+        }
+        console.log('');
+      }
 
       // Before calculating desired weights, we can collect fresh metrics for needed tickers
       try {
@@ -595,6 +647,8 @@ export const getPositionsCycle = async (options?: { runOnce?: boolean }) => {
               totalPriceNumber: totalPriceNumber,
               averagePositionPriceFifoNumber: averagePositionPriceFifoNumber,
               averagePositionPriceNumber: averagePositionPriceNumber,
+              blocked: position.blocked === true, // Check if position is blocked/frozen
+              blockedLots: position.blockedLots || 0, // Number of blocked lots
             });
           }
         }
