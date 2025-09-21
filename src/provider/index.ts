@@ -14,6 +14,9 @@ import { balancer } from '../balancer';
 import { buildDesiredWalletByMode } from '../balancer/desiredBuilder';
 import { collectOnceForSymbols } from '../tools/pollEtfMetrics';
 import { normalizeTicker } from '../utils';
+import { expenseTracker, ExpenseRecord } from '../expenseTracker';
+import { ProfitCalculator } from '../profitCalculator';
+import { dailyAggregator } from '../dailyAggregator';
 
 (global as any).INSTRUMENTS = [];
 (global as any).POSITIONS = [];
@@ -223,6 +226,26 @@ export const generateOrder = async (position: Position) => {
   try {
     const setOrder = await orders.postOrder(order);
     debugProvider('Successfully placed order', setOrder);
+
+    // Track commission expense
+    if (setOrder) {
+      // Calculate commission (standard Tinkoff commission is 0.3% for market orders)
+      const orderAmount = quantityLots * (position.lotSize || 1) * (position.priceNumber || 0);
+      const commission = orderAmount * 0.003; // 0.3% commission
+
+      const expenseRecord: ExpenseRecord = {
+        orderId: order.orderId,
+        ticker: position.base || '',
+        orderType: direction === OrderDirection.ORDER_DIRECTION_BUY ? 'BUY' : 'SELL',
+        lots: quantityLots,
+        amountRub: orderAmount,
+        commission: commission,
+        timestamp: new Date()
+      };
+
+      expenseTracker.addExpense(expenseRecord);
+      debugProvider(`Tracked commission: ${commission.toFixed(2)} RUB for ${position.base}`);
+    }
   } catch (err) {
     debugProvider('Error placing order');
     debugProvider(err);
@@ -677,10 +700,30 @@ export const getPositionsCycle = async (options?: { runOnce?: boolean }) => {
         const rubAbs = Math.abs(rubBalance);
         console.log(`RUR: ${rubSign}${rubAbs.toFixed(2)} RUB`);
       }
-      
+
+      // Calculate and display profit/loss information
+      const profitCalculator = new ProfitCalculator();
+      const profitSummary = profitCalculator.calculateProfit(freshCoreWallet);
+
+      // Get expense information for this iteration
+      const expenseSummary = expenseTracker.getIterationExpenses();
+
+      // Add to daily aggregator
+      dailyAggregator.addIterationData(profitSummary, expenseSummary);
+
+      // Display profit/loss and expense summaries
+      console.log('\n' + profitCalculator.formatProfitSummary(profitSummary));
+      console.log('\n' + expenseTracker.formatExpenseSummary(expenseSummary));
+
+      // Display daily summary
+      console.log(dailyAggregator.formatDailySummary());
+
+      // Clear iteration expenses for next iteration
+      expenseTracker.clearIterationExpenses();
+
       // Handle iteration result updates based on exchange closure behavior
       const shouldUpdateIterationResult = isExchangeOpen || exchangeClosureBehavior.update_iteration_result;
-      
+
       if (shouldUpdateIterationResult) {
         debugProvider(`ITERATION #${count} FINISHED. TIME: ${new Date()}`);
         // Additional iteration result logging/metrics can be added here
