@@ -1,12 +1,13 @@
 import path from 'path';
 import { promises as fs } from 'fs';
 import _ from 'lodash';
-import { DesiredWallet, DesiredMode, PositionMetrics, BalancingDataError } from '../types.d';
+import { DesiredWallet, DesiredMode, PositionMetrics, BalancingDataError, AccountConfig } from '../types.d';
 import { normalizeTicker } from '../utils';
 import { getEtfMarketCapRUB } from '../tools/etfCap';
 import { getShareMarketCapRUB } from '../tools/shareCap';
 import { buildAumMapSmart } from '../tools/etfCap';
 import { toRubFromAum } from '../tools/pollEtfMetrics';
+import { calculateDiffAdjustedWallet } from './diffCalculator';
 
 const debug = require('debug')('bot').extend('desiredBuilder');
 const debugModeSelection = require('debug')('bot').extend('desiredBuilder:mode-selection');
@@ -324,6 +325,58 @@ export const buildDesiredWalletByMode = async (mode: DesiredMode, baseDesired: D
     wallet: result,
     metrics: positionMetrics,
     modeApplied: mode
+  };
+};
+
+/**
+ * Builds desired wallet with diff adjustment if configured
+ */
+export const buildDesiredWalletWithDiff = async (
+  accountConfig: AccountConfig
+): Promise<{
+  wallet: DesiredWallet;
+  metrics: PositionMetrics[];
+  modeApplied: DesiredMode;
+  diffApplied: boolean;
+  diffInfo?: {
+    diffPercentages: Record<string, number>;
+    referenceWallet: DesiredWallet | null;
+    appliedMultiplier: number;
+  };
+}> => {
+  debugModeSelection(`Building desired wallet for account ${accountConfig.id} with mode=${accountConfig.desired_mode}, diff=${accountConfig.diff}`);
+
+  // Step 1: Build base desired wallet using existing mode
+  const { wallet: baseWallet, metrics, modeApplied } = await buildDesiredWalletByMode(
+    accountConfig.desired_mode,
+    accountConfig.desired_wallet
+  );
+
+  // Step 2: Apply diff adjustment if configured
+  if (accountConfig.diff && accountConfig.diff !== 'off') {
+    debugModeSelection(`Applying diff adjustment with mode=${accountConfig.diff}, multiplier=${accountConfig.diff_multiplier}%`);
+
+    const diffResult = await calculateDiffAdjustedWallet(accountConfig, baseWallet);
+
+    return {
+      wallet: diffResult.adjustedWallet,
+      metrics,
+      modeApplied,
+      diffApplied: true,
+      diffInfo: {
+        diffPercentages: diffResult.diffPercentages,
+        referenceWallet: diffResult.referenceWallet,
+        appliedMultiplier: diffResult.appliedMultiplier
+      }
+    };
+  }
+
+  // No diff adjustment needed
+  return {
+    wallet: baseWallet,
+    metrics,
+    modeApplied,
+    diffApplied: false
   };
 };
 

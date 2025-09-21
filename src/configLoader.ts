@@ -156,6 +156,9 @@ class ConfigLoader {
     if (account.buy_requires_total_marginal_sell) {
       this.validateBuyRequiresTotalMarginalSell(account.buy_requires_total_marginal_sell, account);
     }
+
+    // Validate and set diff configuration defaults
+    this.validateDiffConfiguration(account);
   }
 
   public async updateAccountConfig(accountId: string, updates: Partial<AccountConfig>): Promise<void> {
@@ -281,6 +284,55 @@ class ConfigLoader {
     // Minimum: -100% (complete loss), Maximum: 1000% (10x profit)
     if (minProfitPercent < -100 || minProfitPercent > 1000) {
       throw new Error(`Account ${accountId}: min_profit_percent_for_close_position must be between -100 and 1000. Got: ${minProfitPercent}`);
+    }
+  }
+
+  private validateDiffConfiguration(account: AccountConfig): void {
+    // Set default values if not provided
+    if (!account.diff) {
+      account.diff = 'off';
+    }
+    if (account.diff_multiplier === undefined) {
+      account.diff_multiplier = 0;
+    }
+
+    // Validate diff mode
+    const validDiffModes = ['off', 'iteration', 'day'];
+    if (!validDiffModes.includes(account.diff)) {
+      throw new Error(
+        `Account ${account.id}: diff must be one of: ${validDiffModes.join(', ')}. ` +
+        `Got: ${account.diff}`
+      );
+    }
+
+    // Validate diff_multiplier
+    if (typeof account.diff_multiplier !== 'number') {
+      throw new Error(
+        `Account ${account.id}: diff_multiplier must be a number. ` +
+        `Got: ${typeof account.diff_multiplier}`
+      );
+    }
+
+    if (!Number.isFinite(account.diff_multiplier)) {
+      throw new Error(
+        `Account ${account.id}: diff_multiplier must be a finite number. ` +
+        `Got: ${account.diff_multiplier}`
+      );
+    }
+
+    if (account.diff_multiplier < 0 || account.diff_multiplier > 100) {
+      throw new Error(
+        `Account ${account.id}: diff_multiplier must be between 0 and 100. ` +
+        `Got: ${account.diff_multiplier}`
+      );
+    }
+
+    // Log warning if diff_multiplier is set but diff is 'off'
+    if (account.diff === 'off' && account.diff_multiplier > 0) {
+      console.log(
+        `Warning: Account ${account.id} has diff_multiplier set to ${account.diff_multiplier} ` +
+        `but diff is 'off'. The multiplier will have no effect.`
+      );
     }
   }
 
