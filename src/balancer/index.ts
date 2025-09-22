@@ -308,10 +308,10 @@ export const balancer = async (
   }
 
   // Get current account configuration
-  const accountConfig = getAccountConfig();
-  
+  const currentAccountConfig = getAccountConfig();
+
   // Check if buy_requires_total_marginal_sell is enabled
-  const buyRequiresConfig = 'buy_requires_total_marginal_sell' in accountConfig ? accountConfig.buy_requires_total_marginal_sell : undefined;
+  const buyRequiresConfig = 'buy_requires_total_marginal_sell' in currentAccountConfig ? currentAccountConfig.buy_requires_total_marginal_sell : undefined;
   let specialSellingPlan: Record<string, { position: Position; sellAmount: number; sellLots: number }> = {};
   
   if (buyRequiresConfig?.enabled) {

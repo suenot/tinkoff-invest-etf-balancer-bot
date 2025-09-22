@@ -1,7 +1,6 @@
 import { DesiredWallet, DiffMode, AccountConfig } from '../types.d';
 import { diffManager } from './diffManager';
 import { buildDesiredWalletByMode } from './desiredBuilder';
-import { TinkoffInvestApiSingleton } from '../provider';
 
 const debug = require('debug')('bot').extend('diffCalculator');
 
@@ -114,8 +113,7 @@ async function fetchHistoricalWalletAt00(
     const now = new Date();
     const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
 
-    // Initialize API singleton
-    const api = TinkoffInvestApiSingleton.getInstance(accountConfig.t_invest_token);
+    // Note: API singleton would be initialized here if needed for historical data
 
     // Get instruments from desired wallet
     const tickers = Object.keys(accountConfig.desired_wallet);
