@@ -2,7 +2,6 @@
 
 # private
 *.log
-.qoder/
 CONFIG.json
 CONFIG2.json
 /private/
