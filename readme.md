@@ -1,3 +1,12 @@
+```
+████████╗██╗███████╗██████╗ ██████╗
+╚══██╔══╝██║██╔════╝██╔══██╗██╔══██╗
+   ██║   ██║█████╗  ██████╔╝██████╔╝
+   ██║   ██║██╔══╝  ██╔══██╗██╔══██╗
+   ██║   ██║███████╗██████╔╝██████╔╝
+   ╚═╝   ╚═╝╚══════╝╚═════╝ ╚═════╝
+```
+
 # TIEBB - Tinkoff Invest ETF Balancer Bot
 
 [![Build Status](https://github.com/suenot/deep-tinkoff-invest-api/actions/workflows/test.yml/badge.svg)](https://github.com/suenot/deep-tinkoff-invest-api/actions/workflows/test.yml)
