@@ -1,6 +1,7 @@
 import { promises as fs } from 'fs';
 import path from 'path';
 import dotenv from 'dotenv';
+import { configLoader } from '../configLoader';
 
 dotenv.config();
 
@@ -46,6 +47,66 @@ async function fileExists(filePath: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+function getCacheConfig() {
+  try {
+    const config = configLoader.loadConfig();
+    const defaultConfig = { enabled: true, ttl_hours: 168 }; // 7 days default
+    return config.analysis?.openrouter?.cache || defaultConfig;
+  } catch (error) {
+    console.warn(`${LOG_PREFIX} failed to load cache config, using defaults:`, error);
+    return { enabled: true, ttl_hours: 168 };
+  }
+}
+
+interface CacheEntry {
+  cached_at: string;
+  cache_ttl_hours: number;
+  [key: string]: any;
+}
+
+async function isCacheValid(filePath: string): Promise<{ isValid: boolean; reason: string }> {
+  const cacheConfig = getCacheConfig();
+
+  if (!cacheConfig.enabled) {
+    return { isValid: false, reason: 'cache-disabled' };
+  }
+
+  if (!(await fileExists(filePath))) {
+    return { isValid: false, reason: 'cache-not-exists' };
+  }
+
+  try {
+    const content = await fs.readFile(filePath, 'utf-8');
+    const cacheEntry: CacheEntry = JSON.parse(content);
+
+    if (!cacheEntry.cached_at) {
+      return { isValid: false, reason: 'cache-no-timestamp' };
+    }
+
+    const cachedAt = new Date(cacheEntry.cached_at);
+    const now = new Date();
+    const ageHours = (now.getTime() - cachedAt.getTime()) / (1000 * 60 * 60);
+    const ttlHours = cacheEntry.cache_ttl_hours || cacheConfig.ttl_hours;
+
+    if (ageHours > ttlHours) {
+      return { isValid: false, reason: 'cache-expired' };
+    }
+
+    return { isValid: true, reason: 'cache-valid' };
+  } catch (error) {
+    return { isValid: false, reason: 'cache-corrupted' };
+  }
+}
+
+function addCacheMetadata(analysisResult: any): CacheEntry {
+  const cacheConfig = getCacheConfig();
+  return {
+    ...analysisResult,
+    cached_at: new Date().toISOString(),
+    cache_ttl_hours: cacheConfig.ttl_hours
+  };
 }
 
 function buildPrompt(content: string, id: string, symbol: string): string {
@@ -131,17 +192,28 @@ function tryExtractJson(text: string): any {
 async function analyzeFile(symbol: string, filePath: string, outDir: string): Promise<string | null> {
   const id = getIdFromFilename(filePath);
   const outPath = path.join(outDir, `${id}.json`);
-  if (await fileExists(outPath)) {
-    console.log(`${LOG_PREFIX} skip existing ${symbol}/${id}.json`);
+
+  // Check cache validity
+  const cacheStatus = await isCacheValid(outPath);
+
+  if (cacheStatus.isValid) {
+    console.log(`${LOG_PREFIX} skip existing ${symbol}/${id}.json (reason: skipped-by-cache)`);
     return null;
   }
+
+  // Cache is invalid or doesn't exist, fetch from LLM
   const content = await fs.readFile(filePath, 'utf-8');
   const prompt = buildPrompt(content, id, symbol);
-  console.log(`${LOG_PREFIX} analyze ${symbol}/${id} via OpenRouter`);
+  console.log(`${LOG_PREFIX} analyze ${symbol}/${id} via OpenRouter (reason: fetched-via-llm)`);
+
   const raw = await callOpenRouter(prompt);
   const json = tryExtractJson(raw);
+
+  // Add cache metadata
+  const cacheEntry = addCacheMetadata(json);
+
   await ensureDir(outDir);
-  await fs.writeFile(outPath, JSON.stringify(json, null, 2), 'utf-8');
+  await fs.writeFile(outPath, JSON.stringify(cacheEntry, null, 2), 'utf-8');
   console.log(`${LOG_PREFIX} saved ${outPath}`);
   return outPath;
 }
@@ -168,7 +240,11 @@ async function analyzeForSymbol(symbol: string, opts: { onlyId: Nullable<string>
     const filtered: string[] = [];
     for (const f of selected) {
       const id = getIdFromFilename(f);
-      if (!(await fileExists(path.join(outDir, `${id}.json`)))) filtered.push(f);
+      const outPath = path.join(outDir, `${id}.json`);
+      const cacheStatus = await isCacheValid(outPath);
+      if (!cacheStatus.isValid) {
+        filtered.push(f);
+      }
     }
     selected = filtered;
   }

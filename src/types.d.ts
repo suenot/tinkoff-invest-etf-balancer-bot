@@ -143,6 +143,17 @@ export interface ProjectConfig {
     enabled: boolean;
     ttl_hours: number;
   };
+  /**
+   * News analysis configuration
+   */
+  analysis?: {
+    openrouter: {
+      cache: {
+        enabled: boolean;
+        ttl_hours: number;
+      };
+    };
+  };
   accounts: AccountConfig[];
 }
 

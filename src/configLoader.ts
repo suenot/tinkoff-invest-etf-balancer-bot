@@ -100,6 +100,11 @@ class ConfigLoader {
     for (const account of config.accounts) {
       this.validateAccount(account);
     }
+
+    // Validate analysis configuration if present
+    if (config.analysis) {
+      this.validateAnalysisConfig(config.analysis);
+    }
   }
 
   private validateAccount(account: AccountConfig): void {
@@ -333,6 +338,39 @@ class ConfigLoader {
         `Warning: Account ${account.id} has diff_multiplier set to ${account.diff_multiplier} ` +
         `but diff is 'off'. The multiplier will have no effect.`
       );
+    }
+  }
+
+  private validateAnalysisConfig(analysisConfig: any): void {
+    // Validate openrouter configuration
+    if (!analysisConfig.openrouter) {
+      throw new Error('analysis.openrouter configuration is required');
+    }
+
+    // Validate cache configuration
+    if (!analysisConfig.openrouter.cache) {
+      throw new Error('analysis.openrouter.cache configuration is required');
+    }
+
+    const cacheConfig = analysisConfig.openrouter.cache;
+
+    // Validate enabled field
+    if (typeof cacheConfig.enabled !== 'boolean') {
+      throw new Error(`analysis.openrouter.cache.enabled must be a boolean. Got: ${typeof cacheConfig.enabled}`);
+    }
+
+    // Validate ttl_hours field
+    if (typeof cacheConfig.ttl_hours !== 'number') {
+      throw new Error(`analysis.openrouter.cache.ttl_hours must be a number. Got: ${typeof cacheConfig.ttl_hours}`);
+    }
+
+    if (!Number.isFinite(cacheConfig.ttl_hours)) {
+      throw new Error(`analysis.openrouter.cache.ttl_hours must be a finite number. Got: ${cacheConfig.ttl_hours}`);
+    }
+
+    // TTL should be between 1 hour and 8760 hours (1 year)
+    if (cacheConfig.ttl_hours < 1 || cacheConfig.ttl_hours > 8760) {
+      throw new Error(`analysis.openrouter.cache.ttl_hours must be between 1 and 8760 hours. Got: ${cacheConfig.ttl_hours}`);
     }
   }
 
