@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
-import { ProjectConfig, AccountConfig, ExchangeClosureBehavior, BuyRequiresTotalMarginalSellConfig } from './types.d';
+import { ProjectConfig, AccountConfig, ExchangeClosureBehavior, BuyRequiresTotalMarginalSellConfig, AnalysisConfig } from './types.d';
 
 class ConfigLoader {
   private static instance: ConfigLoader;
@@ -159,6 +159,11 @@ class ConfigLoader {
 
     // Validate and set diff configuration defaults
     this.validateDiffConfiguration(account);
+
+    // Validate confirmation configuration if present
+    if (account.analysis || account.confirmationThresholdRub !== undefined) {
+      this.validateConfirmationConfiguration(account);
+    }
   }
 
   public async updateAccountConfig(accountId: string, updates: Partial<AccountConfig>): Promise<void> {
@@ -333,6 +338,70 @@ class ConfigLoader {
         `Warning: Account ${account.id} has diff_multiplier set to ${account.diff_multiplier} ` +
         `but diff is 'off'. The multiplier will have no effect.`
       );
+    }
+  }
+
+  private validateConfirmationConfiguration(account: AccountConfig): void {
+    // Validate confirmationThresholdRub
+    if (account.confirmationThresholdRub !== undefined) {
+      if (typeof account.confirmationThresholdRub !== 'number') {
+        throw new Error(
+          `Account ${account.id}: confirmationThresholdRub must be a number. ` +
+          `Got: ${typeof account.confirmationThresholdRub}`
+        );
+      }
+
+      if (!Number.isFinite(account.confirmationThresholdRub)) {
+        throw new Error(
+          `Account ${account.id}: confirmationThresholdRub must be a finite number. ` +
+          `Got: ${account.confirmationThresholdRub}`
+        );
+      }
+
+      if (account.confirmationThresholdRub < 0) {
+        throw new Error(
+          `Account ${account.id}: confirmationThresholdRub must be positive. ` +
+          `Got: ${account.confirmationThresholdRub}`
+        );
+      }
+    }
+
+    // Validate analysis configuration
+    if (account.analysis) {
+      this.validateAnalysisConfiguration(account.analysis, account.id);
+    }
+
+    // Log warning if confirmationThresholdRub is set but confirmation is not enabled
+    if (account.confirmationThresholdRub !== undefined &&
+        (!account.analysis?.openrouter?.requireConfirmationForLargeOrders)) {
+      console.log(
+        `Warning: Account ${account.id} has confirmationThresholdRub set to ${account.confirmationThresholdRub} ` +
+        `but analysis.openrouter.requireConfirmationForLargeOrders is not enabled. The threshold will have no effect.`
+      );
+    }
+  }
+
+  private validateAnalysisConfiguration(analysis: AnalysisConfig, accountId: string): void {
+    if (analysis.openrouter) {
+      // Validate requireConfirmationForLargeOrders
+      if (analysis.openrouter.requireConfirmationForLargeOrders !== undefined) {
+        if (typeof analysis.openrouter.requireConfirmationForLargeOrders !== 'boolean') {
+          throw new Error(
+            `Account ${accountId}: analysis.openrouter.requireConfirmationForLargeOrders must be a boolean. ` +
+            `Got: ${typeof analysis.openrouter.requireConfirmationForLargeOrders}`
+          );
+        }
+      }
+
+      // Validate apiKey if present
+      if (analysis.openrouter.apiKey !== undefined) {
+        if (typeof analysis.openrouter.apiKey !== 'string') {
+          throw new Error(
+            `Account ${accountId}: analysis.openrouter.apiKey must be a string. ` +
+            `Got: ${typeof analysis.openrouter.apiKey}`
+          );
+        }
+      }
     }
   }
 

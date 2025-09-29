@@ -1,0 +1,116 @@
+{
+  "accounts": [
+    {
+      "id": "account_1",
+      "name": "Main Trading Account with Confirmation",
+      "t_invest_token": "${T_INVEST_TOKEN}",
+      "account_id": "BROKER",
+      "desired_wallet": {
+        "TGLD": 8.33,
+        "TRUR": 8.33,
+        "TRND": 8.33,
+        "TBRU": 8.33,
+        "TDIV": 8.33,
+        "TITR": 8.33,
+        "TLCB": 8.33,
+        "TMON": 8.33,
+        "TMOS": 8.33,
+        "TOFZ": 8.33,
+        "TPAY": 8.33
+      },
+      "desired_mode": "manual",
+      "balance_interval": 3600000,
+      "sleep_between_orders": 3000,
+      "exchange_closure_behavior": {
+        "mode": "dry_run",
+        "update_iteration_result": true
+      },
+      "margin_trading": {
+        "enabled": false,
+        "multiplier": 2,
+        "free_threshold": 5000,
+        "max_margin_size": 5000,
+        "balancing_strategy": "keep_if_small"
+      },
+      "confirmationThresholdRub": 50000,
+      "analysis": {
+        "openrouter": {
+          "requireConfirmationForLargeOrders": true,
+          "apiKey": "${OPENROUTER_API_KEY}"
+        }
+      }
+    },
+    {
+      "id": "account_2",
+      "name": "Conservative Account with Low Threshold",
+      "t_invest_token": "${T_INVEST_TOKEN_2}",
+      "account_id": "BROKER_2",
+      "desired_wallet": {
+        "TGLD": 50,
+        "TRUR": 50
+      },
+      "desired_mode": "manual",
+      "balance_interval": 3600000,
+      "sleep_between_orders": 3000,
+      "exchange_closure_behavior": {
+        "mode": "dry_run",
+        "update_iteration_result": true
+      },
+      "margin_trading": {
+        "enabled": false,
+        "multiplier": 2,
+        "free_threshold": 5000,
+        "max_margin_size": 5000,
+        "balancing_strategy": "keep_if_small"
+      },
+      "confirmationThresholdRub": 10000,
+      "analysis": {
+        "openrouter": {
+          "requireConfirmationForLargeOrders": true
+        }
+      }
+    },
+    {
+      "id": "account_3",
+      "name": "Automated Account without Confirmation",
+      "t_invest_token": "${T_INVEST_TOKEN_3}",
+      "account_id": "BROKER_3",
+      "desired_wallet": {
+        "TGLD": 25,
+        "TRUR": 25,
+        "TBRU": 25,
+        "TDIV": 25
+      },
+      "desired_mode": "manual",
+      "balance_interval": 3600000,
+      "sleep_between_orders": 3000,
+      "exchange_closure_behavior": {
+        "mode": "dry_run",
+        "update_iteration_result": true
+      },
+      "margin_trading": {
+        "enabled": false,
+        "multiplier": 2,
+        "free_threshold": 5000,
+        "max_margin_size": 5000,
+        "balancing_strategy": "keep_if_small"
+      },
+      "confirmationThresholdRub": 1000000,
+      "analysis": {
+        "openrouter": {
+          "requireConfirmationForLargeOrders": false
+        }
+      }
+    }
+  ],
+  "_comments": {
+    "confirmationThresholdRub": "Threshold in rubles above which orders require human confirmation",
+    "analysis.openrouter.requireConfirmationForLargeOrders": "Enable/disable human confirmation for large orders",
+    "analysis.openrouter.apiKey": "OpenRouter API key for AI analysis features (optional)",
+    "examples": {
+      "conservative": "Low threshold (10,000 RUB) with confirmation enabled",
+      "standard": "Medium threshold (50,000 RUB) with confirmation enabled",
+      "automated": "High threshold (1,000,000 RUB) with confirmation disabled"
+    }
+  }
+}
