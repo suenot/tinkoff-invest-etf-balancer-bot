@@ -1,6 +1,12 @@
 import { promises as fs } from 'fs';
 import path from 'path';
 import dotenv from 'dotenv';
+import {
+  HybridNewsAnalysis,
+  createNewsContent,
+  ProcessingMethod,
+  HybridConfig
+} from './hybridNewsAnalysis';
 
 dotenv.config();
 
@@ -9,6 +15,23 @@ type Nullable<T> = T | null | undefined;
 const LOG_PREFIX = '[analyzeNews]';
 const DEFAULT_SYMBOL = 'TRUR';
 const DEFAULT_OPENROUTER_BASE = 'https://openrouter.ai/api/v1';
+
+// Create hybrid analysis instance
+const hybridConfig: Partial<HybridConfig> = {
+  enabled: process.env.HYBRID_ANALYSIS_ENABLED !== 'false', // Default to enabled
+  llmFallback: {
+    enabled: process.env.HYBRID_LLM_FALLBACK_ENABLED === 'true', // Default to disabled for backward compatibility
+    confidenceThreshold: parseFloat(process.env.HYBRID_LLM_CONFIDENCE_THRESHOLD || '0.7'),
+    maxRetries: parseInt(process.env.HYBRID_LLM_MAX_RETRIES || '3'),
+    timeoutMs: parseInt(process.env.HYBRID_LLM_TIMEOUT_MS || '30000')
+  },
+  monitoring: {
+    enabled: process.env.HYBRID_MONITORING_ENABLED !== 'false',
+    logLevel: (process.env.HYBRID_LOG_LEVEL as any) || 'info'
+  }
+};
+
+const hybridAnalysis = new HybridNewsAnalysis(hybridConfig);
 
 function getNewsDir(symbol: string): string {
   return path.resolve(process.cwd(), 'news', symbol);
@@ -128,6 +151,66 @@ function tryExtractJson(text: string): any {
   throw new Error('Failed to parse JSON from model response');
 }
 
+function extractTitleFromContent(content: string): string | null {
+  // Try to extract title from markdown headers or first line
+  const lines = content.split('\n');
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith('#')) {
+      return trimmed.replace(/^#+\s*/, '').trim();
+    }
+    if (trimmed.length > 10 && trimmed.length < 200 && !trimmed.includes('\n')) {
+      return trimmed;
+    }
+  }
+  return null;
+}
+
+function extractDateFromContent(content: string): string | null {
+  // Try to extract date patterns from content
+  const datePatterns = [
+    /\d{1,2}[.\-/]\d{1,2}[.\-/]\d{2,4}/g,
+    /\d{4}[.\-/]\d{1,2}[.\-/]\d{1,2}/g,
+    /\d{1,2}\s+(?:янв|фев|мар|апр|май|июн|июл|авг|сен|окт|ноя|дек|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\w*\s+\d{2,4}/gi
+  ];
+
+  for (const pattern of datePatterns) {
+    const match = content.match(pattern);
+    if (match) {
+      return match[0];
+    }
+  }
+
+  return null;
+}
+
+function convertHybridResultToLegacy(result: any): any {
+  // Convert hybrid analysis result to legacy format for backward compatibility
+  return {
+    id: result.extractedData.id,
+    symbol: result.extractedData.symbol,
+    title: result.extractedData.title,
+    date: result.extractedData.date,
+    category: result.extractedData.category,
+    summary: result.extractedData.summary,
+    bullets: result.extractedData.bullets,
+    trades: result.extractedData.trades,
+    additionalFields: result.extractedData.additionalFields,
+    numbers: result.extractedData.numbers,
+    // Add hybrid-specific metadata for debugging/monitoring
+    _hybrid: {
+      processingMethod: result.processingMethod,
+      confidence: result.confidence,
+      processingTimeMs: result.processingTimeMs,
+      fallbackUsed: result.fallbackUsed,
+      ruleMatches: result.metadata.ruleMatches?.length || 0,
+      llmUsed: result.metadata.llmUsed,
+      apiCalls: result.metadata.apiCalls,
+      errors: result.metadata.errors?.length || 0
+    }
+  };
+}
+
 async function analyzeFile(symbol: string, filePath: string, outDir: string): Promise<string | null> {
   const id = getIdFromFilename(filePath);
   const outPath = path.join(outDir, `${id}.json`);
@@ -135,15 +218,77 @@ async function analyzeFile(symbol: string, filePath: string, outDir: string): Pr
     console.log(`${LOG_PREFIX} skip existing ${symbol}/${id}.json`);
     return null;
   }
+
   const content = await fs.readFile(filePath, 'utf-8');
-  const prompt = buildPrompt(content, id, symbol);
-  console.log(`${LOG_PREFIX} analyze ${symbol}/${id} via OpenRouter`);
-  const raw = await callOpenRouter(prompt);
-  const json = tryExtractJson(raw);
-  await ensureDir(outDir);
-  await fs.writeFile(outPath, JSON.stringify(json, null, 2), 'utf-8');
-  console.log(`${LOG_PREFIX} saved ${outPath}`);
-  return outPath;
+  const title = extractTitleFromContent(content) || `News ${id}`;
+  const date = extractDateFromContent(content) || new Date().toISOString();
+
+  try {
+    // Use hybrid analysis
+    if (hybridAnalysis.getConfig().enabled) {
+      console.log(`${LOG_PREFIX} analyze ${symbol}/${id} via Hybrid Analysis`);
+
+      const newsContent = createNewsContent(
+        id,
+        symbol,
+        title,
+        content,
+        date,
+        filePath
+      );
+
+      const result = await hybridAnalysis.analyzeNews(newsContent, {
+        enableLLM: hybridAnalysis.getConfig().llmFallback.enabled,
+        confidenceThreshold: 0.7,
+        validateResults: true,
+        includeMetrics: true
+      });
+
+      // Convert hybrid result to legacy format for backward compatibility
+      const legacyJson = convertHybridResultToLegacy(result);
+
+      await ensureDir(outDir);
+      await fs.writeFile(outPath, JSON.stringify(legacyJson, null, 2), 'utf-8');
+
+      console.log(`${LOG_PREFIX} saved ${outPath} (method: ${result.processingMethod}, confidence: ${result.confidence.toFixed(2)})`);
+
+      // Log processing statistics
+      if (result.metadata.llmUsed) {
+        console.log(`${LOG_PREFIX} ${symbol}/${id} used LLM fallback (API calls: ${result.metadata.apiCalls})`);
+      } else {
+        console.log(`${LOG_PREFIX} ${symbol}/${id} processed with rules only`);
+      }
+
+      return outPath;
+    } else {
+      // Fallback to legacy LLM-only processing
+      console.log(`${LOG_PREFIX} analyze ${symbol}/${id} via Legacy OpenRouter (hybrid disabled)`);
+      const prompt = buildPrompt(content, id, symbol);
+      const raw = await callOpenRouter(prompt);
+      const json = tryExtractJson(raw);
+      await ensureDir(outDir);
+      await fs.writeFile(outPath, JSON.stringify(json, null, 2), 'utf-8');
+      console.log(`${LOG_PREFIX} saved ${outPath} (legacy mode)`);
+      return outPath;
+    }
+  } catch (error) {
+    console.error(`${LOG_PREFIX} error analyzing ${symbol}/${id}:`, error);
+
+    // Fallback to legacy processing on hybrid failure
+    console.log(`${LOG_PREFIX} falling back to legacy processing for ${symbol}/${id}`);
+    try {
+      const prompt = buildPrompt(content, id, symbol);
+      const raw = await callOpenRouter(prompt);
+      const json = tryExtractJson(raw);
+      await ensureDir(outDir);
+      await fs.writeFile(outPath, JSON.stringify(json, null, 2), 'utf-8');
+      console.log(`${LOG_PREFIX} saved ${outPath} (legacy fallback)`);
+      return outPath;
+    } catch (fallbackError) {
+      console.error(`${LOG_PREFIX} legacy fallback also failed for ${symbol}/${id}:`, fallbackError);
+      throw fallbackError;
+    }
+  }
 }
 
 async function analyzeForSymbol(symbol: string, opts: { onlyId: Nullable<string>; limit: Nullable<number>; onlyNew: boolean }): Promise<void> {
