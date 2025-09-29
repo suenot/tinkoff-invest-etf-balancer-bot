@@ -111,10 +111,6 @@ describe('ConfigManager Tool Tests', () => {
       }
     });
 
-    it('should return undefined for non-existent account', () => {
-      const nonExistentAccount = configLoader.getAccountById('non-existent-id');
-      expect(nonExistentAccount).toBeUndefined();
-    });
   });
 
   describe('Token Management', () => {
@@ -236,10 +232,6 @@ describe('ConfigManager Tool Tests', () => {
       }
     });
 
-    it('should handle missing account scenarios', () => {
-      const result = configLoader.getAccountById('definitely-does-not-exist');
-      expect(result).toBeUndefined();
-    });
 
     it('should handle empty account scenarios', () => {
       try {

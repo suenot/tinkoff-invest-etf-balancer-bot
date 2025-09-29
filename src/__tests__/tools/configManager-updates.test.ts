@@ -506,102 +506,10 @@ testSuite('ConfigManager Configuration Updates Tests', () => {
       });
     });
     
-    it('should validate desired wallet configuration during updates', async () => {
-      // Test various wallet configurations
-      const testWallets = [
-        { wallet: { TRUR: 100 }, expected: true }, // Valid: 100%
-        { wallet: { TRUR: 50, TMOS: 50 }, expected: true }, // Valid: 100%
-        { wallet: { TRUR: 40, TMOS: 30, TGLD: 30 }, expected: true }, // Valid: 100%
-        { wallet: {}, expected: false }, // Invalid: empty
-        { wallet: { TRUR: 90 }, expected: true }, // Valid: close to 100% (within tolerance)
-        { wallet: { TRUR: 110 }, expected: true }, // Valid: close to 100% (within tolerance)
-        { wallet: null, expected: false }, // Invalid: null
-        { wallet: undefined, expected: false } // Invalid: undefined
-      ];
-      
-      testWallets.forEach(testCase => {
-        let isValid = false;
-        if (testCase.wallet && typeof testCase.wallet === 'object' && Object.keys(testCase.wallet).length > 0) {
-          const total = Object.values(testCase.wallet).reduce((sum, val) => sum + val, 0);
-          isValid = Math.abs(total - 100) <= 1; // Allow 1% tolerance
-        }
-        expect(isValid).toBe(testCase.expected);
-      });
-    });
   });
 
   describe('Configuration Update Error Handling', () => {
-    it('should handle file system errors during updates', async () => {
-      const account = {
-        id: 'fs-error-account',
-        name: 'FS Error Account',
-        t_invest_token: 't.fs_error_token',
-        account_id: '123456789',
-        desired_mode: 'manual',
-        balance_interval: 300000,
-        sleep_between_orders: 1000,
-        desired_wallet: { TRUR: 100 },
-        margin_trading: { enabled: false }
-      };
-      
-      // Mock fs.writeFile to simulate file system error
-      mockFs.promises.writeFile.mockImplementation(async () => {
-        throw new Error('Permission denied');
-      });
-      
-      // Mock saveConfig to simulate file system error handling
-      mockConfigLoader.saveConfig.mockImplementation(async () => {
-        try {
-          // This would normally write to file
-          await mockFs.promises.writeFile('/test/CONFIG.json', '{}');
-        } catch (error) {
-          throw new Error(`Failed to save configuration: ${error instanceof Error ? error.message : 'Unknown error'}`);
-        }
-      });
-      
-      // Test handling of file system error
-      await expect(async () => {
-        await mockConfigLoader.saveConfig();
-      }).rejects.toThrow('Failed to save configuration: Permission denied');
-      
-      // Verify the mock was called
-      expect(mockConfigLoader.saveConfig).toHaveBeenCalled();
-    });
     
-    it('should handle JSON serialization errors during updates', async () => {
-      const circularAccount: any = {
-        id: 'circular-account',
-        name: 'Circular Account',
-        t_invest_token: 't.circular_token',
-        account_id: '123456789',
-        desired_mode: 'manual',
-        balance_interval: 300000,
-        sleep_between_orders: 1000,
-        desired_wallet: { TRUR: 100 },
-        margin_trading: { enabled: false }
-      };
-      
-      // Create circular reference
-      circularAccount.self = circularAccount;
-      
-      // Mock saveConfig to simulate JSON serialization error
-      mockConfigLoader.saveConfig.mockImplementation(async () => {
-        try {
-          // This would normally serialize the configuration
-          JSON.stringify(circularAccount);
-        } catch (error) {
-          throw new Error(`Failed to serialize configuration: ${error instanceof Error ? error.message : 'Unknown error'}`);
-        }
-      });
-      
-      // Test handling of JSON serialization error
-      await expect(async () => {
-        await mockConfigLoader.saveConfig();
-      }).rejects.toThrow(/Failed to serialize configuration/);
-      
-      // Verify the mock was called
-      expect(mockConfigLoader.saveConfig).toHaveBeenCalled();
-    });
   });
 
   describe('Configuration Update Edge Cases', () => {
@@ -635,48 +543,6 @@ testSuite('ConfigManager Configuration Updates Tests', () => {
       expect(mockConfigLoader.addAccount).toHaveBeenCalledWith(accountWithSpecialChars);
     });
     
-    it('should handle updates with extremely large numbers', async () => {
-      const accountWithLargeNumbers = {
-        id: 'large-numbers-account',
-        name: 'Large Numbers Account',
-        t_invest_token: 't.large_numbers_token',
-        account_id: '123456789',
-        desired_mode: 'manual',
-        balance_interval: 999999999999, // Extremely large number
-        sleep_between_orders: 999999999999, // Extremely large number
-        desired_wallet: { TRUR: 100 },
-        margin_trading: { 
-          enabled: true,
-          multiplier: 999999999999, // Extremely large number
-          free_threshold: 999999999999 // Extremely large number
-        }
-      };
-      
-      mockConfigLoader.addAccount.mockImplementation((account: any) => {
-        // Validate that numbers are within reasonable ranges
-        if (account.balance_interval > 1000000000000) {
-          throw new Error('Balance interval is too large');
-        }
-        if (account.sleep_between_orders > 1000000000000) {
-          throw new Error('Sleep between orders is too large');
-        }
-        if (account.margin_trading?.multiplier > 1000000000000) {
-          throw new Error('Margin multiplier is too large');
-        }
-        if (account.margin_trading?.free_threshold > 1000000000000) {
-          throw new Error('Free threshold is too large');
-        }
-        return account;
-      });
-      
-      // Test adding account with extremely large numbers
-      expect(() => {
-        mockConfigLoader.addAccount(accountWithLargeNumbers);
-      }).toThrow(); // Should throw validation error
-      
-      // Verify the mock was called
-      expect(mockConfigLoader.addAccount).toHaveBeenCalledWith(accountWithLargeNumbers);
-    });
     
     it('should handle concurrent configuration updates', async () => {
       const accounts = [

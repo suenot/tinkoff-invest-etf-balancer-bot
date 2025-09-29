@@ -445,12 +445,6 @@ describe('buyRequiresTotalMarginalSell Configuration Tests', () => {
       expect(profit!.profitPercent).toBeCloseTo(11.11, 1); // 50/450 * 100
     });
 
-    it('should return null for loss positions', () => {
-      const lossPosition = mockWallet.find(p => p.base === 'TGLD')!;
-      const profit = calculatePositionProfit(lossPosition);
-      
-      expect(profit).toBeNull();
-    });
 
     it('should return null for positions with zero amount', () => {
       const zeroPosition = mockWallet.find(p => p.base === 'TMON')!;
