@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
-import { ProjectConfig, AccountConfig, ExchangeClosureBehavior, BuyRequiresTotalMarginalSellConfig, AnalysisConfig } from './types.d';
+import { ProjectConfig, AccountConfig, ExchangeClosureBehavior, BuyRequiresTotalMarginalSellConfig, AnalysisConfig, OpenRouterConfig } from './types.d';
 
 class ConfigLoader {
   private static instance: ConfigLoader;
@@ -99,6 +99,11 @@ class ConfigLoader {
 
     for (const account of config.accounts) {
       this.validateAccount(account);
+    }
+
+    // Validate analysis configuration if present
+    if (config.analysis) {
+      this.validateAnalysisConfig(config.analysis);
     }
   }
 
@@ -383,24 +388,62 @@ class ConfigLoader {
 
   private validateAnalysisConfiguration(analysis: AnalysisConfig, accountId: string): void {
     if (analysis.openrouter) {
-      // Validate requireConfirmationForLargeOrders
-      if (analysis.openrouter.requireConfirmationForLargeOrders !== undefined) {
-        if (typeof analysis.openrouter.requireConfirmationForLargeOrders !== 'boolean') {
-          throw new Error(
-            `Account ${accountId}: analysis.openrouter.requireConfirmationForLargeOrders must be a boolean. ` +
-            `Got: ${typeof analysis.openrouter.requireConfirmationForLargeOrders}`
-          );
-        }
-      }
+      this.validateOpenRouterConfig(analysis.openrouter, accountId);
+    }
+  }
 
-      // Validate apiKey if present
-      if (analysis.openrouter.apiKey !== undefined) {
-        if (typeof analysis.openrouter.apiKey !== 'string') {
-          throw new Error(
-            `Account ${accountId}: analysis.openrouter.apiKey must be a string. ` +
-            `Got: ${typeof analysis.openrouter.apiKey}`
-          );
-        }
+  private validateAnalysisConfig(analysis: AnalysisConfig): void {
+    // Validate openrouter configuration
+    if (!analysis.openrouter) {
+      throw new Error('Analysis configuration must contain openrouter section');
+    }
+
+    this.validateOpenRouterConfig(analysis.openrouter);
+  }
+
+  private validateOpenRouterConfig(openrouter: OpenRouterConfig, accountId?: string): void {
+    const contextPrefix = accountId ? `Account ${accountId}: ` : '';
+
+    // Validate enabled field - required
+    if (typeof openrouter.enabled !== 'boolean') {
+      throw new Error(`${contextPrefix}analysis.openrouter.enabled must be a boolean. Got: ` + typeof openrouter.enabled);
+    }
+
+    // Validate optional model field
+    if (openrouter.model !== undefined && typeof openrouter.model !== 'string') {
+      throw new Error(`${contextPrefix}analysis.openrouter.model must be a string. Got: ` + typeof openrouter.model);
+    }
+
+    // Validate optional temperature field
+    if (openrouter.temperature !== undefined) {
+      if (typeof openrouter.temperature !== 'number') {
+        throw new Error(`${contextPrefix}analysis.openrouter.temperature must be a number. Got: ` + typeof openrouter.temperature);
+      }
+      if (!Number.isFinite(openrouter.temperature)) {
+        throw new Error(`${contextPrefix}analysis.openrouter.temperature must be a finite number. Got: ` + openrouter.temperature);
+      }
+      if (openrouter.temperature < 0.0 || openrouter.temperature > 2.0) {
+        throw new Error(`${contextPrefix}analysis.openrouter.temperature must be between 0.0 and 2.0. Got: ` + openrouter.temperature);
+      }
+    }
+
+    // Validate requireConfirmationForLargeOrders if present (account-level only)
+    if (accountId && openrouter.requireConfirmationForLargeOrders !== undefined) {
+      if (typeof openrouter.requireConfirmationForLargeOrders !== 'boolean') {
+        throw new Error(
+          `${contextPrefix}analysis.openrouter.requireConfirmationForLargeOrders must be a boolean. ` +
+          `Got: ${typeof openrouter.requireConfirmationForLargeOrders}`
+        );
+      }
+    }
+
+    // Validate apiKey if present (account-level only)
+    if (accountId && openrouter.apiKey !== undefined) {
+      if (typeof openrouter.apiKey !== 'string') {
+        throw new Error(
+          `${contextPrefix}analysis.openrouter.apiKey must be a string. ` +
+          `Got: ${typeof openrouter.apiKey}`
+        );
       }
     }
   }

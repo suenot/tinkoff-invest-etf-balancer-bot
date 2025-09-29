@@ -1,0 +1,169 @@
+test	UNKNOWN STEP	﻿2025-09-29T23:16:38.5723716Z Current runner version: '2.328.0'
+test	UNKNOWN STEP	2025-09-29T23:16:38.5750415Z ##[group]Runner Image Provisioner
+test	UNKNOWN STEP	2025-09-29T23:16:38.5751244Z Hosted Compute Agent
+test	UNKNOWN STEP	2025-09-29T23:16:38.5751805Z Version: 20250912.392
+test	UNKNOWN STEP	2025-09-29T23:16:38.5752443Z Commit: d921fda672a98b64f4f82364647e2f10b2267d0b
+test	UNKNOWN STEP	2025-09-29T23:16:38.5753182Z Build Date: 2025-09-12T15:23:14Z
+test	UNKNOWN STEP	2025-09-29T23:16:38.5753772Z ##[endgroup]
+test	UNKNOWN STEP	2025-09-29T23:16:38.5754352Z ##[group]Operating System
+test	UNKNOWN STEP	2025-09-29T23:16:38.5754974Z Ubuntu
+test	UNKNOWN STEP	2025-09-29T23:16:38.5755431Z 24.04.3
+test	UNKNOWN STEP	2025-09-29T23:16:38.5756101Z LTS
+test	UNKNOWN STEP	2025-09-29T23:16:38.5756555Z ##[endgroup]
+test	UNKNOWN STEP	2025-09-29T23:16:38.5757054Z ##[group]Runner Image
+test	UNKNOWN STEP	2025-09-29T23:16:38.5757555Z Image: ubuntu-24.04
+test	UNKNOWN STEP	2025-09-29T23:16:38.5758248Z Version: 20250922.53.1
+test	UNKNOWN STEP	2025-09-29T23:16:38.5759240Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20250922.53/images/ubuntu/Ubuntu2404-Readme.md
+test	UNKNOWN STEP	2025-09-29T23:16:38.5760887Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20250922.53
+test	UNKNOWN STEP	2025-09-29T23:16:38.5761869Z ##[endgroup]
+test	UNKNOWN STEP	2025-09-29T23:16:38.5763034Z ##[group]GITHUB_TOKEN Permissions
+test	UNKNOWN STEP	2025-09-29T23:16:38.5765314Z Contents: read
+test	UNKNOWN STEP	2025-09-29T23:16:38.5766291Z Metadata: read
+test	UNKNOWN STEP	2025-09-29T23:16:38.5766814Z Packages: read
+test	UNKNOWN STEP	2025-09-29T23:16:38.5767317Z ##[endgroup]
+test	UNKNOWN STEP	2025-09-29T23:16:38.5769699Z Secret source: Actions
+test	UNKNOWN STEP	2025-09-29T23:16:38.5770891Z Prepare workflow directory
+test	UNKNOWN STEP	2025-09-29T23:16:38.6103354Z Prepare all required actions
+test	UNKNOWN STEP	2025-09-29T23:16:38.6141742Z Getting action download info
+test	UNKNOWN STEP	2025-09-29T23:16:38.9413523Z Download action repository 'actions/checkout@v4' (SHA:08eba0b27e820071cde6df949e0beb9ba4906955)
+test	UNKNOWN STEP	2025-09-29T23:16:39.1164122Z Download action repository 'oven-sh/setup-bun@v1' (SHA:f4d14e03ff726c06358e5557344e1da148b56cf7)
+test	UNKNOWN STEP	2025-09-29T23:16:39.4410043Z Download action repository 'codecov/codecov-action@v4' (SHA:b9fd7d16f6d7d1b5d2bec1a2887e65ceed900238)
+test	UNKNOWN STEP	2025-09-29T23:16:39.8694760Z Complete job name: test
+test	UNKNOWN STEP	2025-09-29T23:16:39.9445431Z ##[group]Run actions/checkout@v4
+test	UNKNOWN STEP	2025-09-29T23:16:39.9446521Z with:
+test	UNKNOWN STEP	2025-09-29T23:16:39.9447054Z   repository: suenot/tinkoff-invest-etf-balancer-bot
+test	UNKNOWN STEP	2025-09-29T23:16:39.9447830Z   token: ***
+test	UNKNOWN STEP	2025-09-29T23:16:39.9448227Z   ssh-strict: true
+test	UNKNOWN STEP	2025-09-29T23:16:39.9448635Z   ssh-user: git
+test	UNKNOWN STEP	2025-09-29T23:16:39.9449057Z   persist-credentials: true
+test	UNKNOWN STEP	2025-09-29T23:16:39.9449520Z   clean: true
+test	UNKNOWN STEP	2025-09-29T23:16:39.9449938Z   sparse-checkout-cone-mode: true
+test	UNKNOWN STEP	2025-09-29T23:16:39.9450423Z   fetch-depth: 1
+test	UNKNOWN STEP	2025-09-29T23:16:39.9450817Z   fetch-tags: false
+test	UNKNOWN STEP	2025-09-29T23:16:39.9451231Z   show-progress: true
+test	UNKNOWN STEP	2025-09-29T23:16:39.9451642Z   lfs: false
+test	UNKNOWN STEP	2025-09-29T23:16:39.9452038Z   submodules: false
+test	UNKNOWN STEP	2025-09-29T23:16:39.9452473Z   set-safe-directory: true
+test	UNKNOWN STEP	2025-09-29T23:16:39.9453146Z ##[endgroup]
+test	UNKNOWN STEP	2025-09-29T23:16:40.0539783Z Syncing repository: suenot/tinkoff-invest-etf-balancer-bot
+test	UNKNOWN STEP	2025-09-29T23:16:40.0542007Z ##[group]Getting Git version info
+test	UNKNOWN STEP	2025-09-29T23:16:40.0543746Z Working directory is '/home/runner/work/tinkoff-invest-etf-balancer-bot/tinkoff-invest-etf-balancer-bot'
+test	UNKNOWN STEP	2025-09-29T23:16:40.0546398Z [command]/usr/bin/git version
+test	UNKNOWN STEP	2025-09-29T23:16:40.0608407Z git version 2.51.0
+test	UNKNOWN STEP	2025-09-29T23:16:40.0634963Z ##[endgroup]
+test	UNKNOWN STEP	2025-09-29T23:16:40.0650949Z Temporarily overriding HOME='/home/runner/work/_temp/2e55b743-ae17-46ef-8020-359a8573a3a2' before making global git config changes
+test	UNKNOWN STEP	2025-09-29T23:16:40.0653308Z Adding repository directory to the temporary git global config as a safe directory
+test	UNKNOWN STEP	2025-09-29T23:16:40.0658100Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/tinkoff-invest-etf-balancer-bot/tinkoff-invest-etf-balancer-bot
+test	UNKNOWN STEP	2025-09-29T23:16:40.0694374Z Deleting the contents of '/home/runner/work/tinkoff-invest-etf-balancer-bot/tinkoff-invest-etf-balancer-bot'
+test	UNKNOWN STEP	2025-09-29T23:16:40.0697718Z ##[group]Initializing the repository
+test	UNKNOWN STEP	2025-09-29T23:16:40.0702961Z [command]/usr/bin/git init /home/runner/work/tinkoff-invest-etf-balancer-bot/tinkoff-invest-etf-balancer-bot
+test	UNKNOWN STEP	2025-09-29T23:16:40.0799010Z hint: Using 'master' as the name for the initial branch. This default branch name
+test	UNKNOWN STEP	2025-09-29T23:16:40.0800524Z hint: is subject to change. To configure the initial branch name to use in all
+test	UNKNOWN STEP	2025-09-29T23:16:40.0801437Z hint: of your new repositories, which will suppress this warning, call:
+test	UNKNOWN STEP	2025-09-29T23:16:40.0802340Z hint:
+test	UNKNOWN STEP	2025-09-29T23:16:40.0803089Z hint: 	git config --global init.defaultBranch <name>
+test	UNKNOWN STEP	2025-09-29T23:16:40.0803775Z hint:
+test	UNKNOWN STEP	2025-09-29T23:16:40.0804332Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+test	UNKNOWN STEP	2025-09-29T23:16:40.0805210Z hint: 'development'. The just-created branch can be renamed via this command:
+test	UNKNOWN STEP	2025-09-29T23:16:40.0806166Z hint:
+test	UNKNOWN STEP	2025-09-29T23:16:40.0806570Z hint: 	git branch -m <name>
+test	UNKNOWN STEP	2025-09-29T23:16:40.0807022Z hint:
+test	UNKNOWN STEP	2025-09-29T23:16:40.0807616Z hint: Disable this message with "git config set advice.defaultBranchName false"
+test	UNKNOWN STEP	2025-09-29T23:16:40.0809195Z Initialized empty Git repository in /home/runner/work/tinkoff-invest-etf-balancer-bot/tinkoff-invest-etf-balancer-bot/.git/
+test	UNKNOWN STEP	2025-09-29T23:16:40.0814089Z [command]/usr/bin/git remote add origin https://github.com/suenot/tinkoff-invest-etf-balancer-bot
+test	UNKNOWN STEP	2025-09-29T23:16:40.0850666Z ##[endgroup]
+test	UNKNOWN STEP	2025-09-29T23:16:40.0851867Z ##[group]Disabling automatic garbage collection
+test	UNKNOWN STEP	2025-09-29T23:16:40.0855733Z [command]/usr/bin/git config --local gc.auto 0
+test	UNKNOWN STEP	2025-09-29T23:16:40.0883829Z ##[endgroup]
+test	UNKNOWN STEP	2025-09-29T23:16:40.0885069Z ##[group]Setting up auth
+test	UNKNOWN STEP	2025-09-29T23:16:40.0891743Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+test	UNKNOWN STEP	2025-09-29T23:16:40.0922321Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+test	UNKNOWN STEP	2025-09-29T23:16:40.1240035Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+test	UNKNOWN STEP	2025-09-29T23:16:40.1272072Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+test	UNKNOWN STEP	2025-09-29T23:16:40.1496628Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+test	UNKNOWN STEP	2025-09-29T23:16:40.1531237Z ##[endgroup]
+test	UNKNOWN STEP	2025-09-29T23:16:40.1532132Z ##[group]Fetching the repository
+test	UNKNOWN STEP	2025-09-29T23:16:40.1540159Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +6e35a0166eee40b742364cf452f111a759930018:refs/remotes/pull/61/merge
+test	UNKNOWN STEP	2025-09-29T23:16:40.5774765Z From https://github.com/suenot/tinkoff-invest-etf-balancer-bot
+test	UNKNOWN STEP	2025-09-29T23:16:40.5776360Z  * [new ref]         6e35a0166eee40b742364cf452f111a759930018 -> pull/61/merge
+test	UNKNOWN STEP	2025-09-29T23:16:40.5867117Z ##[endgroup]
+test	UNKNOWN STEP	2025-09-29T23:16:40.5869035Z ##[group]Determining the checkout info
+test	UNKNOWN STEP	2025-09-29T23:16:40.5871243Z ##[endgroup]
+test	UNKNOWN STEP	2025-09-29T23:16:40.5874851Z [command]/usr/bin/git sparse-checkout disable
+test	UNKNOWN STEP	2025-09-29T23:16:40.5916446Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+test	UNKNOWN STEP	2025-09-29T23:16:40.5946976Z ##[group]Checking out the ref
+test	UNKNOWN STEP	2025-09-29T23:16:40.5950269Z [command]/usr/bin/git checkout --progress --force refs/remotes/pull/61/merge
+test	UNKNOWN STEP	2025-09-29T23:16:40.6291276Z Note: switching to 'refs/remotes/pull/61/merge'.
+test	UNKNOWN STEP	2025-09-29T23:16:40.6294091Z 
+test	UNKNOWN STEP	2025-09-29T23:16:40.6295101Z You are in 'detached HEAD' state. You can look around, make experimental
+test	UNKNOWN STEP	2025-09-29T23:16:40.6297075Z changes and commit them, and you can discard any commits you make in this
+test	UNKNOWN STEP	2025-09-29T23:16:40.6298682Z state without impacting any branches by switching back to a branch.
+test	UNKNOWN STEP	2025-09-29T23:16:40.6299647Z 
+test	UNKNOWN STEP	2025-09-29T23:16:40.6300578Z If you want to create a new branch to retain commits you create, you may
+test	UNKNOWN STEP	2025-09-29T23:16:40.6302571Z do so (now or later) by using -c with the switch command. Example:
+test	UNKNOWN STEP	2025-09-29T23:16:40.6303508Z 
+test	UNKNOWN STEP	2025-09-29T23:16:40.6303847Z   git switch -c <new-branch-name>
+test	UNKNOWN STEP	2025-09-29T23:16:40.6304475Z 
+test	UNKNOWN STEP	2025-09-29T23:16:40.6304830Z Or undo this operation with:
+test	UNKNOWN STEP	2025-09-29T23:16:40.6305402Z 
+test	UNKNOWN STEP	2025-09-29T23:16:40.6305959Z   git switch -
+test	UNKNOWN STEP	2025-09-29T23:16:40.6306841Z 
+test	UNKNOWN STEP	2025-09-29T23:16:40.6307748Z Turn off this advice by setting config variable advice.detachedHead to false
+test	UNKNOWN STEP	2025-09-29T23:16:40.6309063Z 
+test	UNKNOWN STEP	2025-09-29T23:16:40.6310604Z HEAD is now at 6e35a01 Merge f411e79133c6e0ee91fc821250214db74442f55f into b4a2e784fa0f78dcb93299bf5da3fa216f5e580c
+test	UNKNOWN STEP	2025-09-29T23:16:40.6315028Z ##[endgroup]
+test	UNKNOWN STEP	2025-09-29T23:16:40.6348938Z [command]/usr/bin/git log -1 --format=%H
+test	UNKNOWN STEP	2025-09-29T23:16:40.6373203Z 6e35a0166eee40b742364cf452f111a759930018
+test	UNKNOWN STEP	2025-09-29T23:16:40.6649993Z ##[group]Run oven-sh/setup-bun@v1
+test	UNKNOWN STEP	2025-09-29T23:16:40.6651117Z with:
+test	UNKNOWN STEP	2025-09-29T23:16:40.6651921Z   bun-version: latest
+test	UNKNOWN STEP	2025-09-29T23:16:40.6652833Z   no-cache: false
+test	UNKNOWN STEP	2025-09-29T23:16:40.6653686Z ##[endgroup]
+test	UNKNOWN STEP	2025-09-29T23:16:40.7818649Z Downloading a new version of Bun: https://bun.sh/download/latest/linux/x64?avx2=true&profile=false
+test	UNKNOWN STEP	2025-09-29T23:16:41.5360372Z [command]/usr/bin/unzip -o -q /home/runner/work/_temp/f6fef573-de2d-4459-a424-b9929e0a90f3
+test	UNKNOWN STEP	2025-09-29T23:16:42.3136367Z [command]/home/runner/.bun/bin/bun --revision
+test	UNKNOWN STEP	2025-09-29T23:16:42.3175897Z 1.2.23+cf1367137
+test	UNKNOWN STEP	2025-09-29T23:16:42.3315114Z ##[group]Run bun install
+test	UNKNOWN STEP	2025-09-29T23:16:42.3315497Z [36;1mbun install[0m
+test	UNKNOWN STEP	2025-09-29T23:16:42.3354786Z shell: /usr/bin/bash -e {0}
+test	UNKNOWN STEP	2025-09-29T23:16:42.3355092Z ##[endgroup]
+test	UNKNOWN STEP	2025-09-29T23:16:42.3460328Z bun install v1.2.23 (cf136713)
+test	UNKNOWN STEP	2025-09-29T23:16:42.3507745Z Resolving dependencies
+test	UNKNOWN STEP	2025-09-29T23:16:42.5056891Z Resolved, downloaded and extracted [48]
+test	UNKNOWN STEP	2025-09-29T23:16:42.5057674Z error: ConnectionRefused downloading package manifest typescript
+test	UNKNOWN STEP	2025-09-29T23:16:42.5058168Z 
+test	UNKNOWN STEP	2025-09-29T23:16:42.5058680Z error: ConnectionRefused downloading package manifest eslint-config-airbnb-typescript
+test	UNKNOWN STEP	2025-09-29T23:16:42.5059326Z 
+test	UNKNOWN STEP	2025-09-29T23:16:42.5059824Z error: ConnectionRefused downloading package manifest axios
+test	UNKNOWN STEP	2025-09-29T23:16:42.5060302Z 
+test	UNKNOWN STEP	2025-09-29T23:16:42.5060647Z error: ConnectionRefused downloading package manifest eslint
+test	UNKNOWN STEP	2025-09-29T23:16:42.5061087Z 
+test	UNKNOWN STEP	2025-09-29T23:16:42.5061493Z error: ConnectionRefused downloading package manifest eslint-plugin-import
+test	UNKNOWN STEP	2025-09-29T23:16:42.5062170Z 
+test	UNKNOWN STEP	2025-09-29T23:16:42.5062538Z error: FailedToOpenSocket downloading package manifest @types/node
+test	UNKNOWN STEP	2025-09-29T23:16:42.5063037Z 
+test	UNKNOWN STEP	2025-09-29T23:16:42.5063492Z error: ConnectionRefused downloading package manifest @typescript-eslint/parser
+test	UNKNOWN STEP	2025-09-29T23:16:42.5064070Z 
+test	UNKNOWN STEP	2025-09-29T23:16:42.5064578Z error: ConnectionRefused downloading package manifest @typescript-eslint/eslint-plugin
+test	UNKNOWN STEP	2025-09-29T23:16:42.5069525Z error: @typescript-eslint/eslint-plugin@^7.0.0 failed to resolve
+test	UNKNOWN STEP	2025-09-29T23:16:42.5070283Z error: @typescript-eslint/parser@^7.0.0 failed to resolve
+test	UNKNOWN STEP	2025-09-29T23:16:42.5070906Z error: eslint@^8.57.0 failed to resolve
+test	UNKNOWN STEP	2025-09-29T23:16:42.5071555Z error: eslint-config-airbnb-typescript@^18.0.0 failed to resolve
+test	UNKNOWN STEP	2025-09-29T23:16:42.5072260Z error: eslint-plugin-import@^2.29.0 failed to resolve
+test	UNKNOWN STEP	2025-09-29T23:16:42.5072881Z error: @types/node@^20.0.0 failed to resolve
+test	UNKNOWN STEP	2025-09-29T23:16:42.5073409Z error: axios@^1.7.0 failed to resolve
+test	UNKNOWN STEP	2025-09-29T23:16:42.5073942Z error: typescript@^5.0.0 failed to resolve
+test	UNKNOWN STEP	2025-09-29T23:16:42.5099723Z ##[error]Process completed with exit code 1.
+test	UNKNOWN STEP	2025-09-29T23:16:42.5273363Z Post job cleanup.
+test	UNKNOWN STEP	2025-09-29T23:16:42.6214526Z [command]/usr/bin/git version
+test	UNKNOWN STEP	2025-09-29T23:16:42.6256335Z git version 2.51.0
+test	UNKNOWN STEP	2025-09-29T23:16:42.6295465Z Temporarily overriding HOME='/home/runner/work/_temp/64a04d7a-91f4-411d-9f48-cd86daed5f62' before making global git config changes
+test	UNKNOWN STEP	2025-09-29T23:16:42.6296991Z Adding repository directory to the temporary git global config as a safe directory
+test	UNKNOWN STEP	2025-09-29T23:16:42.6300960Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/tinkoff-invest-etf-balancer-bot/tinkoff-invest-etf-balancer-bot
+test	UNKNOWN STEP	2025-09-29T23:16:42.6334124Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+test	UNKNOWN STEP	2025-09-29T23:16:42.6365861Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+test	UNKNOWN STEP	2025-09-29T23:16:42.6586714Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+test	UNKNOWN STEP	2025-09-29T23:16:42.6607243Z http.https://github.com/.extraheader
+test	UNKNOWN STEP	2025-09-29T23:16:42.6619393Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+test	UNKNOWN STEP	2025-09-29T23:16:42.6650253Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+test	UNKNOWN STEP	2025-09-29T23:16:42.6968887Z Cleaning up orphan processes

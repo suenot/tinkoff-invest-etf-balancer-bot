@@ -8,6 +8,7 @@ import {
   HybridConfig
 } from './hybridNewsAnalysis';
 import { llmLogger, llmMetricsCollector, TokenUsage } from '../llmLogger';
+import { configLoader } from '../configLoader';
 
 dotenv.config();
 
@@ -101,11 +102,39 @@ function buildPrompt(content: string, id: string, symbol: string): string {
   ].join('\n');
 }
 
+function isAnalysisEnabled(): boolean {
+  try {
+    const config = configLoader.loadConfig();
+    return config.analysis?.openrouter?.enabled ?? false;
+  } catch (error) {
+    console.log(`${LOG_PREFIX} failed to load configuration, defaulting to analysis disabled:`, error);
+    return false;
+  }
+}
+
 function getOpenRouterConfig() {
   const apiKey = process.env.OPENROUTER_API_KEY || '';
-  const model = process.env.OPENROUTER_MODEL || 'openrouter/auto';
   const base = process.env.OPENROUTER_BASE || DEFAULT_OPENROUTER_BASE;
-  return { apiKey, model, base };
+
+  // Get model and temperature from config if available, otherwise use environment variables or defaults
+  let model = process.env.OPENROUTER_MODEL || 'openrouter/auto';
+  let temperature = 0.2;
+
+  try {
+    const config = configLoader.loadConfig();
+    if (config.analysis?.openrouter) {
+      if (config.analysis.openrouter.model) {
+        model = config.analysis.openrouter.model;
+      }
+      if (config.analysis.openrouter.temperature !== undefined) {
+        temperature = config.analysis.openrouter.temperature;
+      }
+    }
+  } catch (error) {
+    console.log(`${LOG_PREFIX} failed to load configuration for OpenRouter settings, using defaults:`, error);
+  }
+
+  return { apiKey, model, base, temperature };
 }
 
 function estimateTokens(text: string): number {
@@ -144,7 +173,7 @@ function parseTokenUsageFromResponse(data: any): TokenUsage | undefined {
 }
 
 async function callOpenRouter(prompt: string): Promise<string> {
-  const { apiKey, model, base } = getOpenRouterConfig();
+  const { apiKey, model, base, temperature } = getOpenRouterConfig();
   if (!apiKey) {
     throw new Error('OPENROUTER_API_KEY is not set. Please set it in .env');
   }
@@ -161,7 +190,7 @@ async function callOpenRouter(prompt: string): Promise<string> {
         { role: 'system', content: 'Return only valid JSON. No comments. No markdown.' },
         { role: 'user', content: prompt },
       ],
-      temperature: 0.2,
+      temperature,
     };
 
     const res = await fetch(url, {
@@ -321,6 +350,12 @@ function convertHybridResultToLegacy(result: any): any {
 async function analyzeFile(symbol: string, filePath: string, outDir: string): Promise<string | null> {
   const id = getIdFromFilename(filePath);
   const outPath = path.join(outDir, `${id}.json`);
+
+  // Check if analysis is enabled before proceeding
+  if (!isAnalysisEnabled()) {
+    console.log(`${LOG_PREFIX} skip analysis for ${symbol}/${id} - OpenRouter analysis disabled in configuration`);
+    return null;
+  }
 
   if (await fileExists(outPath)) {
     console.log(`${LOG_PREFIX} skip existing ${symbol}/${id}.json`);
