@@ -11,6 +11,7 @@
 
 [![Build Status](https://github.com/suenot/tinkoff-invest-etf-balancer-bot/actions/workflows/test.yml/badge.svg)](https://github.com/suenot/tinkoff-invest-etf-balancer-bot/actions/workflows/test.yml)
 [![Modularity Check](https://github.com/suenot/tinkoff-invest-etf-balancer-bot/actions/workflows/modularity-check.yml/badge.svg)](https://github.com/suenot/tinkoff-invest-etf-balancer-bot/actions/workflows/modularity-check.yml)
+[![Coverage](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/suenot/7a1c9f5e8b2d4e3f6g7h8i9j0k1l2m3n/raw/coverage-badge.json)](https://github.com/suenot/tinkoff-invest-etf-balancer-bot/actions/workflows/test.yml)
 [![License](https://img.shields.io/github/license/suenot/tinkoff-invest-etf-balancer-bot)](LICENSE)
 [![Wiki](https://img.shields.io/badge/wiki-documentation-blue)](.qoder/repowiki/en/content/)
 
