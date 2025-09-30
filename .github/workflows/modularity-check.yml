@@ -1,0 +1,53 @@
+name: Modularity Check
+
+on:
+  push:
+    branches: [ master, main ]
+  pull_request:
+    branches: [ master, main ]
+
+jobs:
+  modularity-check:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Check file line counts
+      run: |
+        echo "🔍 Checking for files with more than 1000 lines..."
+
+        # Find all source code files (excluding node_modules, dist, and other build artifacts)
+        FILES=$(find . -type f \( -name "*.ts" -o -name "*.js" -o -name "*.tsx" -o -name "*.jsx" \) \
+          ! -path "./node_modules/*" \
+          ! -path "./dist/*" \
+          ! -path "./coverage/*" \
+          ! -path "./.git/*")
+
+        # Track if any violations are found
+        VIOLATIONS=0
+
+        echo "📊 Analyzing source files..."
+
+        # Check each file for line count
+        for file in $FILES; do
+          LINES=$(wc -l < "$file")
+          if [ "$LINES" -gt 1000 ]; then
+            echo "❌ VIOLATION: $file has $LINES lines (exceeds 1000 line limit)"
+            VIOLATIONS=$((VIOLATIONS + 1))
+          else
+            echo "✅ OK: $file has $LINES lines"
+          fi
+        done
+
+        echo ""
+        echo "📈 Summary:"
+        if [ "$VIOLATIONS" -eq 0 ]; then
+          echo "✅ All files are within the 1000-line limit!"
+          echo "🎉 Modularity check passed!"
+        else
+          echo "❌ Found $VIOLATIONS file(s) exceeding 1000 lines"
+          echo "💡 Consider breaking down large files into smaller, more modular components"
+          exit 1
+        fi

@@ -8,7 +8,7 @@ import debug from 'debug';
 // import { OrderDirection, OrderType } from '../provider/invest-nodejs-grpc-sdk/src/sdk';
 import { OrderDirection, OrderType } from 'tinkoff-sdk-grpc-js/dist/generated/orders';
 import { configLoader } from '../configLoader';
-import { Wallet, Position, BalancingDataError } from '../types.d';
+import { Wallet, Position, BalancingDataError, OrderResult, OrderConfirmationRequest, OrderExecutionResult, OrderDetails } from '../types.d';
 import { sleep, writeFile, convertNumberToTinkoffNumber, convertTinkoffNumberToNumber } from '../utils';
 import { balancer } from '../balancer';
 import { buildDesiredWalletByMode, buildDesiredWalletWithDiff } from '../balancer/desiredBuilder';
@@ -159,7 +159,7 @@ export const generateOrdersSequential = async (
   debugProvider('✅ Sequential order execution completed');
 };
 
-export const generateOrder = async (position: Position, accountConfig?: any, sdkObjects?: any) => {
+export const generateOrder = async (position: Position, accountConfig?: any, sdkObjects?: any): Promise<OrderResult | number | boolean> => {
   debugProvider('generateOrder');
   debugProvider('position', position);
 
@@ -177,18 +177,70 @@ export const generateOrder = async (position: Position, accountConfig?: any, sdk
 
   if (!position.toBuyLots || !isFinite(position.toBuyLots)) {
     debugProvider('toBuyLots is NaN/Infinity/undefined. Skipping position.');
-    return 0;
+    const result: OrderExecutionResult = {
+      status: 'skipped',
+      errorMessage: 'toBuyLots is NaN/Infinity/undefined'
+    };
+    return result;
   }
 
   if ((-1 < position.toBuyLots) && (position.toBuyLots < 1)) {
     debugProvider('Order less than 1 lot. Not worth executing.');
-    return 0;
+    const result: OrderExecutionResult = {
+      status: 'skipped',
+      errorMessage: 'Order less than 1 lot'
+    };
+    return result;
   }
 
   debugProvider('Position is greater than or equal to 1 lot');
 
   const direction = position.toBuyLots >= 1 ? OrderDirection.ORDER_DIRECTION_BUY : OrderDirection.ORDER_DIRECTION_SELL;
   debugProvider('direction', direction);
+
+  // Calculate order value and check for confirmation requirements
+  const quantityLots = Math.floor(Math.abs(position.toBuyLots || 0));
+  const orderValueRub = quantityLots * (position.lotPriceNumber || 0);
+
+  // Check if confirmation is required for large orders
+  if (accountConfig?.analysis?.openrouter?.requireConfirmationForLargeOrders &&
+      accountConfig?.confirmationThresholdRub !== undefined &&
+      orderValueRub > accountConfig.confirmationThresholdRub) {
+
+    debugProvider(`🔔 Order requires confirmation: ${orderValueRub.toFixed(2)} RUB > ${accountConfig.confirmationThresholdRub} RUB threshold`);
+
+    // Create order details for confirmation request
+    const orderDetails: OrderDetails = {
+      ticker: position.base || '',
+      quantity: quantityLots,
+      direction: direction === OrderDirection.ORDER_DIRECTION_BUY ? 'BUY' : 'SELL',
+      valueRub: orderValueRub,
+      lotSize: position.lotSize || 1,
+      pricePerLot: position.lotPriceNumber || 0,
+      figi: position.figi || '',
+      orderId: uniqid()
+    };
+
+    const confirmationRequest: OrderConfirmationRequest = {
+      status: 'needs_confirmation',
+      orderDetails,
+      thresholdInfo: {
+        configuredThreshold: accountConfig.confirmationThresholdRub,
+        actualOrderValue: orderValueRub
+      },
+      timestamp: new Date().toISOString()
+    };
+
+    console.log(`\n🔔 CONFIRMATION REQUIRED for ${orderDetails.direction} order:`);
+    console.log(`   Ticker: ${orderDetails.ticker}`);
+    console.log(`   Quantity: ${orderDetails.quantity} lots`);
+    console.log(`   Value: ${orderValueRub.toFixed(2)} RUB`);
+    console.log(`   Threshold: ${accountConfig.confirmationThresholdRub} RUB`);
+    console.log(`   Order ID: ${orderDetails.orderId}`);
+    console.log(`   Awaiting human approval...`);
+
+    return confirmationRequest;
+  }
 
   // for (const i of _.range(position.toBuyLots)) {
   //   // Idea to create single-lot orders to ensure they always execute completely, not partially.
@@ -218,20 +270,27 @@ export const generateOrder = async (position: Position, accountConfig?: any, sdk
   //   await sleep(1000);
   // }
 
-  // Or we can create regular orders
+  // Continue with normal order execution
   debugProvider('position', position);
 
   debugProvider('Creating market order');
-  const quantityLots = Math.floor(Math.abs(position.toBuyLots || 0));
 
   if (quantityLots < 1) {
     debugProvider('Number of lots after rounding < 1. Skipping order.');
-    return 0;
+    const result: OrderExecutionResult = {
+      status: 'skipped',
+      errorMessage: 'Number of lots after rounding < 1'
+    };
+    return result;
   }
 
   if (!position.figi) {
     debugProvider('Position missing figi. Skipping order.');
-    return 0;
+    const result: OrderExecutionResult = {
+      status: 'skipped',
+      errorMessage: 'Position missing figi'
+    };
+    return result;
   }
 
   const order = {
@@ -248,7 +307,11 @@ export const generateOrder = async (position: Position, accountConfig?: any, sdk
   const { orders } = sdkObjects || {};
   if (!orders) {
     debugProvider('orders SDK object not provided, skipping order');
-    return 0;
+    const result: OrderExecutionResult = {
+      status: 'skipped',
+      errorMessage: 'orders SDK object not provided'
+    };
+    return result;
   }
 
   try {
@@ -256,10 +319,11 @@ export const generateOrder = async (position: Position, accountConfig?: any, sdk
     debugProvider('Successfully placed order', setOrder);
 
     // Track commission expense
+    let commission = 0;
     if (setOrder) {
       // Calculate commission (standard Tinkoff commission is 0.3% for market orders)
       const orderAmount = quantityLots * (position.lotSize || 1) * (position.priceNumber || 0);
-      const commission = orderAmount * 0.003; // 0.3% commission
+      commission = orderAmount * 0.003; // 0.3% commission
 
       const expenseRecord: ExpenseRecord = {
         orderId: order.orderId,
@@ -274,13 +338,48 @@ export const generateOrder = async (position: Position, accountConfig?: any, sdk
       expenseTracker.addExpense(expenseRecord);
       debugProvider(`Tracked commission: ${commission.toFixed(2)} RUB for ${position.base}`);
     }
+
+    await sleep(accountConfig?.sleep_between_orders || 1000);
+
+    const result: OrderExecutionResult = {
+      status: 'executed',
+      orderDetails: {
+        ticker: position.base || '',
+        quantity: quantityLots,
+        direction: direction === OrderDirection.ORDER_DIRECTION_BUY ? 'BUY' : 'SELL',
+        valueRub: orderValueRub,
+        lotSize: position.lotSize || 1,
+        pricePerLot: position.lotPriceNumber || 0,
+        figi: position.figi || '',
+        orderId: order.orderId
+      },
+      commission
+    };
+    return result;
+
   } catch (err) {
     debugProvider('Error placing order');
     debugProvider(err);
     // console.trace(err);
-  }
-  await sleep(accountConfig?.sleep_between_orders || 1000);
 
+    await sleep(accountConfig?.sleep_between_orders || 1000);
+
+    const result: OrderExecutionResult = {
+      status: 'error',
+      errorMessage: err instanceof Error ? err.message : 'Unknown error placing order',
+      orderDetails: {
+        ticker: position.base || '',
+        quantity: quantityLots,
+        direction: direction === OrderDirection.ORDER_DIRECTION_BUY ? 'BUY' : 'SELL',
+        valueRub: orderValueRub,
+        lotSize: position.lotSize || 1,
+        pricePerLot: position.lotPriceNumber || 0,
+        figi: position.figi || '',
+        orderId: order.orderId
+      }
+    };
+    return result;
+  }
 };
 
 export const getAccountId = async (type: any, users?: any) => {

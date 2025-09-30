@@ -7,6 +7,7 @@ import {
   ProcessingMethod,
   HybridConfig
 } from './hybridNewsAnalysis';
+import { llmLogger, llmMetricsCollector, TokenUsage } from '../llmLogger';
 
 dotenv.config();
 
@@ -107,38 +108,144 @@ function getOpenRouterConfig() {
   return { apiKey, model, base };
 }
 
+function estimateTokens(text: string): number {
+  // Rough estimation: ~4 characters per token for English text
+  // This is a simplified estimation, real tokenization varies by model
+  return Math.ceil(text.length / 4);
+}
+
+function estimateCost(inputTokens: number, outputTokens: number, model: string): number {
+  // Simplified cost estimation for common models
+  // Real pricing should be fetched from OpenRouter API or configuration
+  const pricing: Record<string, { input: number; output: number }> = {
+    'openrouter/auto': { input: 0.000002, output: 0.000006 }, // Average pricing
+    'anthropic/claude-3-haiku': { input: 0.00000025, output: 0.00000125 },
+    'anthropic/claude-3-sonnet': { input: 0.000003, output: 0.000015 },
+    'openai/gpt-4o-mini': { input: 0.00000015, output: 0.0000006 },
+    'openai/gpt-4o': { input: 0.000005, output: 0.000015 },
+    'meta-llama/llama-3.1-8b-instruct': { input: 0.0000001, output: 0.0000001 },
+  };
+
+  const modelPricing = pricing[model] || pricing['openrouter/auto'];
+  return (inputTokens * modelPricing.input) + (outputTokens * modelPricing.output);
+}
+
+function parseTokenUsageFromResponse(data: any): TokenUsage | undefined {
+  // Try to extract token usage from OpenRouter response
+  const usage = data?.usage;
+  if (usage && typeof usage.prompt_tokens === 'number' && typeof usage.completion_tokens === 'number') {
+    return {
+      inputTokens: usage.prompt_tokens,
+      outputTokens: usage.completion_tokens,
+      totalTokens: usage.total_tokens || (usage.prompt_tokens + usage.completion_tokens)
+    };
+  }
+  return undefined;
+}
+
 async function callOpenRouter(prompt: string): Promise<string> {
   const { apiKey, model, base } = getOpenRouterConfig();
   if (!apiKey) {
     throw new Error('OPENROUTER_API_KEY is not set. Please set it in .env');
   }
-  const url = `${base}/chat/completions`;
-  const body: any = {
-    model,
-    messages: [
-      { role: 'system', content: 'Return only valid JSON. No comments. No markdown.' },
-      { role: 'user', content: prompt },
-    ],
-    temperature: 0.2,
-  };
 
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-      'HTTP-Referer': 'https://github.com/suenot/deep-tinkoff-invest-api',
-      'X-Title': 'tinkoff-invest-etf-balancer-bot',
-    } as any,
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`OpenRouter error ${res.status}: ${text}`);
+  // Start logging the LLM call
+  const promptLength = prompt.length;
+  const requestId = llmLogger.logCallStarted(model, promptLength);
+
+  try {
+    const url = `${base}/chat/completions`;
+    const body: any = {
+      model,
+      messages: [
+        { role: 'system', content: 'Return only valid JSON. No comments. No markdown.' },
+        { role: 'user', content: prompt },
+      ],
+      temperature: 0.2,
+    };
+
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://github.com/suenot/deep-tinkoff-invest-api',
+        'X-Title': 'tinkoff-invest-etf-balancer-bot',
+      } as any,
+      body: JSON.stringify(body),
+    });
+
+    if (!res.ok) {
+      const text = await res.text();
+      const error = new Error(`OpenRouter error ${res.status}: ${text}`);
+      llmLogger.logCallError(requestId, error);
+
+      // Add error event to metrics collector
+      const errorEvent = {
+        eventType: 'llm.call_error' as const,
+        timestamp: new Date(),
+        requestId,
+        model,
+        error: error.message,
+        errorType: res.status === 429 ? 'rate_limiting' : res.status >= 500 ? 'server_error' : 'api_error'
+      };
+      llmMetricsCollector.addEvent(errorEvent);
+
+      throw error;
+    }
+
+    const data: any = await res.json();
+    const content: string = data?.choices?.[0]?.message?.content || '';
+
+    // Extract token usage and calculate cost
+    const tokenUsage = parseTokenUsageFromResponse(data);
+    let estimatedCost = 0;
+
+    if (tokenUsage) {
+      estimatedCost = estimateCost(tokenUsage.inputTokens, tokenUsage.outputTokens, model);
+    } else {
+      // Fallback estimation if no token usage data from API
+      const estimatedInputTokens = estimateTokens(prompt);
+      const estimatedOutputTokens = estimateTokens(content);
+      estimatedCost = estimateCost(estimatedInputTokens, estimatedOutputTokens, model);
+    }
+
+    // Log successful call
+    llmLogger.logCallSuccess(requestId, content.length, tokenUsage, estimatedCost);
+
+    // Add success event to metrics collector
+    const successEvent = {
+      eventType: 'llm.call_success' as const,
+      timestamp: new Date(),
+      requestId,
+      model,
+      duration: undefined, // Will be calculated by logger
+      tokenUsage,
+      estimatedCost,
+      responseLength: content.length
+    };
+    llmMetricsCollector.addEvent(successEvent);
+
+    return content;
+
+  } catch (error) {
+    // If error wasn't already logged (e.g., network error), log it
+    if (error instanceof Error && !error.message.includes('OpenRouter error')) {
+      llmLogger.logCallError(requestId, error);
+
+      const errorEvent = {
+        eventType: 'llm.call_error' as const,
+        timestamp: new Date(),
+        requestId,
+        model,
+        error: error.message,
+        errorType: 'network'
+      };
+      llmMetricsCollector.addEvent(errorEvent);
+    }
+
+    throw error;
   }
-  const data: any = await res.json();
-  const content: string = data?.choices?.[0]?.message?.content || '';
-  return content;
 }
 
 function tryExtractJson(text: string): any {
@@ -214,8 +321,25 @@ function convertHybridResultToLegacy(result: any): any {
 async function analyzeFile(symbol: string, filePath: string, outDir: string): Promise<string | null> {
   const id = getIdFromFilename(filePath);
   const outPath = path.join(outDir, `${id}.json`);
+
   if (await fileExists(outPath)) {
     console.log(`${LOG_PREFIX} skip existing ${symbol}/${id}.json`);
+
+    // Log cache hit
+    const { model } = getOpenRouterConfig();
+    const requestId = llmLogger.logCallStarted(model, 0);
+    llmLogger.logCallSkippedCache(requestId, 'Output file already exists', 0);
+
+    // Add cache event to metrics collector
+    const cacheEvent = {
+      eventType: 'llm.call_skipped_cache' as const,
+      timestamp: new Date(),
+      requestId,
+      model,
+      cacheReason: 'Output file already exists'
+    };
+    llmMetricsCollector.addEvent(cacheEvent);
+
     return null;
   }
 
@@ -319,12 +443,26 @@ async function analyzeForSymbol(symbol: string, opts: { onlyId: Nullable<string>
   }
 
   console.log(`${LOG_PREFIX} symbol=${symbol} total=${newsFiles.length} toAnalyze=${selected.length}`);
+
+  // Clear previous iteration data
+  llmLogger.clearIterationData();
+
   for (const f of selected) {
     try {
       await analyzeFile(symbol, f, outDir);
     } catch (e) {
       console.error(`${LOG_PREFIX} error analyzing ${f}:`, e);
     }
+  }
+
+  // Display LLM call summary
+  const summary = llmLogger.getIterationSummary();
+  if (summary.totalCalls > 0) {
+    console.log(llmLogger.formatSummary(summary));
+
+    // Export data for persistence
+    await llmLogger.exportData();
+    await llmMetricsCollector.exportMetrics();
   }
 }
 
@@ -347,6 +485,12 @@ async function run(): Promise<void> {
   const iterate = async () => {
     for (const sym of symbols) {
       await analyzeForSymbol(sym, { onlyId, limit, onlyNew });
+    }
+
+    // Display daily LLM metrics summary after all symbols are processed
+    const dailyMetrics = llmMetricsCollector.getCurrentMetrics();
+    if (dailyMetrics.totalCalls > 0) {
+      console.log(llmMetricsCollector.formatDailySummary());
     }
   };
 
