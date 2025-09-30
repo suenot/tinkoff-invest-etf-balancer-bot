@@ -427,6 +427,11 @@ class ConfigLoader {
       }
     }
 
+    // Validate cache configuration if present
+    if (openrouter.cache !== undefined) {
+      this.validateCacheConfig(openrouter.cache, contextPrefix);
+    }
+
     // Validate requireConfirmationForLargeOrders if present (account-level only)
     if (accountId && openrouter.requireConfirmationForLargeOrders !== undefined) {
       if (typeof openrouter.requireConfirmationForLargeOrders !== 'boolean') {
@@ -445,6 +450,27 @@ class ConfigLoader {
           `Got: ${typeof openrouter.apiKey}`
         );
       }
+    }
+  }
+
+  private validateCacheConfig(cacheConfig: any, contextPrefix: string = ''): void {
+    // Validate enabled field
+    if (typeof cacheConfig.enabled !== 'boolean') {
+      throw new Error(`${contextPrefix}analysis.openrouter.cache.enabled must be a boolean. Got: ${typeof cacheConfig.enabled}`);
+    }
+
+    // Validate ttl_hours field
+    if (typeof cacheConfig.ttl_hours !== 'number') {
+      throw new Error(`${contextPrefix}analysis.openrouter.cache.ttl_hours must be a number. Got: ${typeof cacheConfig.ttl_hours}`);
+    }
+
+    if (!Number.isFinite(cacheConfig.ttl_hours)) {
+      throw new Error(`${contextPrefix}analysis.openrouter.cache.ttl_hours must be a finite number. Got: ${cacheConfig.ttl_hours}`);
+    }
+
+    // TTL should be between 1 hour and 8760 hours (1 year)
+    if (cacheConfig.ttl_hours < 1 || cacheConfig.ttl_hours > 8760) {
+      throw new Error(`${contextPrefix}analysis.openrouter.cache.ttl_hours must be between 1 and 8760 hours. Got: ${cacheConfig.ttl_hours}`);
     }
   }
 

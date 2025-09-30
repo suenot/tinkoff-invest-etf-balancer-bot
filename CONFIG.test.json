@@ -1,4 +1,12 @@
 {
+    "analysis": {
+      "openrouter": {
+        "cache": {
+          "enabled": true,
+          "ttl_hours": 24
+        }
+      }
+    },
     "accounts": [
       {
         "id": "0",

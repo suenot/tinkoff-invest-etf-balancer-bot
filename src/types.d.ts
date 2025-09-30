@@ -109,6 +109,11 @@ export interface OpenRouterConfig {
   // Human-in-loop confirmation configuration
   requireConfirmationForLargeOrders?: boolean;
   apiKey?: string;
+  // Cache configuration
+  cache?: {
+    enabled: boolean;
+    ttl_hours: number;
+  };
 }
 
 export interface AnalysisConfig {

@@ -73,6 +73,66 @@ async function fileExists(filePath: string): Promise<boolean> {
   }
 }
 
+function getCacheConfig() {
+  try {
+    const config = configLoader.loadConfig();
+    const defaultConfig = { enabled: true, ttl_hours: 168 }; // 7 days default
+    return config.analysis?.openrouter?.cache || defaultConfig;
+  } catch (error) {
+    console.warn(`${LOG_PREFIX} failed to load cache config, using defaults:`, error);
+    return { enabled: true, ttl_hours: 168 };
+  }
+}
+
+interface CacheEntry {
+  cached_at: string;
+  cache_ttl_hours: number;
+  [key: string]: any;
+}
+
+async function isCacheValid(filePath: string): Promise<{ isValid: boolean; reason: string }> {
+  const cacheConfig = getCacheConfig();
+
+  if (!cacheConfig.enabled) {
+    return { isValid: false, reason: 'cache-disabled' };
+  }
+
+  if (!(await fileExists(filePath))) {
+    return { isValid: false, reason: 'cache-not-exists' };
+  }
+
+  try {
+    const content = await fs.readFile(filePath, 'utf-8');
+    const cacheEntry: CacheEntry = JSON.parse(content);
+
+    if (!cacheEntry.cached_at) {
+      return { isValid: false, reason: 'cache-no-timestamp' };
+    }
+
+    const cachedAt = new Date(cacheEntry.cached_at);
+    const now = new Date();
+    const ageHours = (now.getTime() - cachedAt.getTime()) / (1000 * 60 * 60);
+    const ttlHours = cacheEntry.cache_ttl_hours || cacheConfig.ttl_hours;
+
+    if (ageHours > ttlHours) {
+      return { isValid: false, reason: 'cache-expired' };
+    }
+
+    return { isValid: true, reason: 'cache-valid' };
+  } catch (error) {
+    return { isValid: false, reason: 'cache-corrupted' };
+  }
+}
+
+function addCacheMetadata(analysisResult: any): CacheEntry {
+  const cacheConfig = getCacheConfig();
+  return {
+    ...analysisResult,
+    cached_at: new Date().toISOString(),
+    cache_ttl_hours: cacheConfig.ttl_hours
+  };
+}
+
 function buildPrompt(content: string, id: string, symbol: string): string {
   return [
     `You are an experienced financial analyst. Analyze the news about fund ${symbol}.`,
@@ -357,21 +417,23 @@ async function analyzeFile(symbol: string, filePath: string, outDir: string): Pr
     return null;
   }
 
-  if (await fileExists(outPath)) {
-    console.log(`${LOG_PREFIX} skip existing ${symbol}/${id}.json`);
+  // Check cache validity with enhanced TTL logic
+  const cacheStatus = await isCacheValid(outPath);
 
-    // Log cache hit
+  if (cacheStatus.isValid) {
+    console.log(`${LOG_PREFIX} skip existing ${symbol}/${id}.json (reason: skipped-by-cache)`);
+
+    // Log cache hit for metrics
     const { model } = getOpenRouterConfig();
     const requestId = llmLogger.logCallStarted(model, 0);
-    llmLogger.logCallSkippedCache(requestId, 'Output file already exists', 0);
+    llmLogger.logCallSkippedCache(requestId, 'Cache valid within TTL', 0);
 
-    // Add cache event to metrics collector
     const cacheEvent = {
       eventType: 'llm.call_skipped_cache' as const,
       timestamp: new Date(),
       requestId,
       model,
-      cacheReason: 'Output file already exists'
+      cacheReason: 'Cache valid within TTL'
     };
     llmMetricsCollector.addEvent(cacheEvent);
 
@@ -382,11 +444,13 @@ async function analyzeFile(symbol: string, filePath: string, outDir: string): Pr
   const title = extractTitleFromContent(content) || `News ${id}`;
   const date = extractDateFromContent(content) || new Date().toISOString();
 
-  try {
-    // Use hybrid analysis
-    if (hybridAnalysis.getConfig().enabled) {
-      console.log(`${LOG_PREFIX} analyze ${symbol}/${id} via Hybrid Analysis`);
+  console.log(`${LOG_PREFIX} analyze ${symbol}/${id} via OpenRouter (reason: fetched-via-llm)`);
 
+  try {
+    let json: any;
+
+    // Use hybrid analysis if enabled
+    if (hybridAnalysis.getConfig().enabled) {
       const newsContent = createNewsContent(
         id,
         symbol,
@@ -404,12 +468,7 @@ async function analyzeFile(symbol: string, filePath: string, outDir: string): Pr
       });
 
       // Convert hybrid result to legacy format for backward compatibility
-      const legacyJson = convertHybridResultToLegacy(result);
-
-      await ensureDir(outDir);
-      await fs.writeFile(outPath, JSON.stringify(legacyJson, null, 2), 'utf-8');
-
-      console.log(`${LOG_PREFIX} saved ${outPath} (method: ${result.processingMethod}, confidence: ${result.confidence.toFixed(2)})`);
+      json = convertHybridResultToLegacy(result);
 
       // Log processing statistics
       if (result.metadata.llmUsed) {
@@ -417,30 +476,36 @@ async function analyzeFile(symbol: string, filePath: string, outDir: string): Pr
       } else {
         console.log(`${LOG_PREFIX} ${symbol}/${id} processed with rules only`);
       }
-
-      return outPath;
     } else {
       // Fallback to legacy LLM-only processing
-      console.log(`${LOG_PREFIX} analyze ${symbol}/${id} via Legacy OpenRouter (hybrid disabled)`);
       const prompt = buildPrompt(content, id, symbol);
       const raw = await callOpenRouter(prompt);
-      const json = tryExtractJson(raw);
-      await ensureDir(outDir);
-      await fs.writeFile(outPath, JSON.stringify(json, null, 2), 'utf-8');
-      console.log(`${LOG_PREFIX} saved ${outPath} (legacy mode)`);
-      return outPath;
+      json = tryExtractJson(raw);
     }
+
+    // Add cache metadata to the result
+    const cacheEntry = addCacheMetadata(json);
+
+    await ensureDir(outDir);
+    await fs.writeFile(outPath, JSON.stringify(cacheEntry, null, 2), 'utf-8');
+    console.log(`${LOG_PREFIX} saved ${outPath}`);
+    return outPath;
+
   } catch (error) {
     console.error(`${LOG_PREFIX} error analyzing ${symbol}/${id}:`, error);
 
-    // Fallback to legacy processing on hybrid failure
+    // Fallback to legacy processing on any failure
     console.log(`${LOG_PREFIX} falling back to legacy processing for ${symbol}/${id}`);
     try {
       const prompt = buildPrompt(content, id, symbol);
       const raw = await callOpenRouter(prompt);
       const json = tryExtractJson(raw);
+
+      // Add cache metadata even to fallback results
+      const cacheEntry = addCacheMetadata(json);
+
       await ensureDir(outDir);
-      await fs.writeFile(outPath, JSON.stringify(json, null, 2), 'utf-8');
+      await fs.writeFile(outPath, JSON.stringify(cacheEntry, null, 2), 'utf-8');
       console.log(`${LOG_PREFIX} saved ${outPath} (legacy fallback)`);
       return outPath;
     } catch (fallbackError) {
@@ -472,7 +537,11 @@ async function analyzeForSymbol(symbol: string, opts: { onlyId: Nullable<string>
     const filtered: string[] = [];
     for (const f of selected) {
       const id = getIdFromFilename(f);
-      if (!(await fileExists(path.join(outDir, `${id}.json`)))) filtered.push(f);
+      const outPath = path.join(outDir, `${id}.json`);
+      const cacheStatus = await isCacheValid(outPath);
+      if (!cacheStatus.isValid) {
+        filtered.push(f);
+      }
     }
     selected = filtered;
   }
