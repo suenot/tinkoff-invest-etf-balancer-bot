@@ -1,4 +1,11 @@
 {
+  "analysis": {
+    "openrouter": {
+      "enabled": false,
+      "model": "openrouter/auto",
+      "temperature": 0.2
+    }
+  },
   "accounts": [
     {
       "id": "account_1",
@@ -46,6 +53,10 @@
     }
   ],
   "_comments": {
+    "analysis": "Controls news analysis functionality using OpenRouter AI service",
+    "analysis.openrouter.enabled": "Master switch for OpenRouter API calls. When false, no API calls are made and news analysis is skipped",
+    "analysis.openrouter.model": "Optional: Override the AI model used for analysis. Defaults to environment variable OPENROUTER_MODEL or 'openrouter/auto'",
+    "analysis.openrouter.temperature": "Optional: Override temperature for AI responses (0.0-2.0). Lower values = more deterministic responses",
     "diff": "Controls diff calculation mode: 'off' (disabled), 'iteration' (diff between consecutive iterations), 'day' (diff from 00:00)",
     "diff_multiplier": "Percentage (0-100) of how strongly the diff should influence portfolio allocation. 0 = no influence, 100 = full influence"
   }

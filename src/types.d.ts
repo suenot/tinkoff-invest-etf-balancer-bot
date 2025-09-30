@@ -100,14 +100,19 @@ export interface ExchangeClosureBehavior {
 
 export type DiffMode = 'off' | 'iteration' | 'day';
 
-// Human-in-loop confirmation configuration
+// OpenRouter configuration for both news analysis and human-in-loop confirmation
 export interface OpenRouterConfig {
+  // News analysis configuration
+  enabled: boolean;
+  model?: string;
+  temperature?: number;
+  // Human-in-loop confirmation configuration
   requireConfirmationForLargeOrders?: boolean;
   apiKey?: string;
 }
 
 export interface AnalysisConfig {
-  openrouter?: OpenRouterConfig;
+  openrouter: OpenRouterConfig;
 }
 
 export interface AccountConfig {
@@ -162,6 +167,10 @@ export interface ProjectConfig {
     enabled: boolean;
     ttl_hours: number;
   };
+  /**
+   * News analysis configuration
+   */
+  analysis?: AnalysisConfig;
   accounts: AccountConfig[];
 }
 
