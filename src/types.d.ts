@@ -100,6 +100,26 @@ export interface ExchangeClosureBehavior {
 
 export type DiffMode = 'off' | 'iteration' | 'day';
 
+// OpenRouter configuration for both news analysis and human-in-loop confirmation
+export interface OpenRouterConfig {
+  // News analysis configuration
+  enabled: boolean;
+  model?: string;
+  temperature?: number;
+  // Human-in-loop confirmation configuration
+  requireConfirmationForLargeOrders?: boolean;
+  apiKey?: string;
+  // Cache configuration
+  cache?: {
+    enabled: boolean;
+    ttl_hours: number;
+  };
+}
+
+export interface AnalysisConfig {
+  openrouter: OpenRouterConfig;
+}
+
 export interface AccountConfig {
   id: string;
   name: string;
@@ -133,6 +153,15 @@ export interface AccountConfig {
    * Default: 0 (no influence when diff is off)
    */
   diff_multiplier?: number;
+  /**
+   * Threshold in rubles above which orders require human confirmation
+   * Only applies when analysis.openrouter.requireConfirmationForLargeOrders is true
+   */
+  confirmationThresholdRub?: number;
+  /**
+   * Analysis configuration including AI providers and confirmation settings
+   */
+  analysis?: AnalysisConfig;
 }
 
 export interface ProjectConfig {
@@ -146,14 +175,7 @@ export interface ProjectConfig {
   /**
    * News analysis configuration
    */
-  analysis?: {
-    openrouter: {
-      cache: {
-        enabled: boolean;
-        ttl_hours: number;
-      };
-    };
-  };
+  analysis?: AnalysisConfig;
   accounts: AccountConfig[];
 }
 
@@ -222,3 +244,34 @@ export interface DiffData {
     [key: string]: DesiredWallet; // key is either "00:00" or "iteration_N"
   };
 }
+
+// Human-in-loop confirmation types
+export interface OrderDetails {
+  ticker: string;
+  quantity: number;
+  direction: 'BUY' | 'SELL';
+  valueRub: number;
+  lotSize: number;
+  pricePerLot: number;
+  figi: string;
+  orderId: string;
+}
+
+export interface OrderConfirmationRequest {
+  status: 'needs_confirmation';
+  orderDetails: OrderDetails;
+  thresholdInfo: {
+    configuredThreshold: number;
+    actualOrderValue: number;
+  };
+  timestamp: string;
+}
+
+export interface OrderExecutionResult {
+  status: 'executed' | 'skipped' | 'error';
+  orderDetails?: OrderDetails;
+  errorMessage?: string;
+  commission?: number;
+}
+
+export type OrderResult = OrderConfirmationRequest | OrderExecutionResult;

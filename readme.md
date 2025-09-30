@@ -9,9 +9,10 @@
 
 # TIEBB - Tinkoff Invest ETF Balancer Bot
 
-[![Build Status](https://github.com/suenot/deep-tinkoff-invest-api/actions/workflows/test.yml/badge.svg)](https://github.com/suenot/deep-tinkoff-invest-api/actions/workflows/test.yml)
-[![Coverage](https://codecov.io/gh/suenot/deep-tinkoff-invest-api/branch/master/graph/badge.svg)](https://codecov.io/gh/suenot/deep-tinkoff-invest-api)
-[![License](https://img.shields.io/github/license/suenot/deep-tinkoff-invest-api)](LICENSE)
+[![Build Status](https://github.com/suenot/tinkoff-invest-etf-balancer-bot/actions/workflows/test.yml/badge.svg)](https://github.com/suenot/tinkoff-invest-etf-balancer-bot/actions/workflows/test.yml)
+[![Modularity Check](https://github.com/suenot/tinkoff-invest-etf-balancer-bot/actions/workflows/modularity-check.yml/badge.svg)](https://github.com/suenot/tinkoff-invest-etf-balancer-bot/actions/workflows/modularity-check.yml)
+[![Coverage](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/suenot/7a1c9f5e8b2d4e3f6g7h8i9j0k1l2m3n/raw/coverage-badge.json)](https://github.com/suenot/tinkoff-invest-etf-balancer-bot/actions/workflows/test.yml)
+[![License](https://img.shields.io/github/license/suenot/tinkoff-invest-etf-balancer-bot)](LICENSE)
 [![Wiki](https://img.shields.io/badge/wiki-documentation-blue)](.qoder/repowiki/en/content/)
 
 An automated trading bot for portfolio management and rebalancing on Tinkoff Invest accounts.
@@ -358,4 +359,4 @@ Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for details.
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the Apache License 2.0 License - see the [LICENSE](LICENSE) file for details.

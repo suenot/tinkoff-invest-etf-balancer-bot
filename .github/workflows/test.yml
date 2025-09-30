@@ -27,11 +27,43 @@ jobs:
     - name: Run tests with coverage
       run: c8 --reporter=lcov --reporter=text bun test --timeout 5000
 
-    - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v4
+    - name: Extract coverage percentage
+      id: coverage
+      run: |
+        # Extract coverage percentage from lcov.info or text output
+        if [ -f "./coverage/lcov.info" ]; then
+          # Parse lcov.info for more accurate coverage
+          coverage_percent=$(grep -E "^LF:|^LH:" ./coverage/lcov.info | awk 'BEGIN{lf=0;lh=0} /^LF:/{lf+=$2} /^LH:/{lh+=$2} END{if(lf>0) printf("%.1f", (lh/lf)*100); else print "0"}')
+        else
+          # Fallback to text output parsing
+          coverage_output=$(c8 --reporter=text bun test --timeout 5000 2>&1)
+          coverage_percent=$(echo "$coverage_output" | grep -E "All files|Total|Overall" | tail -1 | grep -oE '[0-9]+(\.[0-9]+)?%' | sed 's/%//' | head -1)
+        fi
+
+        # Ensure we have a valid number
+        if ! [[ "$coverage_percent" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+          coverage_percent="0"
+        fi
+
+        # Round to integer for badge
+        coverage_int=$(printf "%.0f" "$coverage_percent")
+
+        echo "percentage=$coverage_int" >> $GITHUB_OUTPUT
+        echo "Coverage: $coverage_int%"
+
+    - name: Generate coverage badge
+      uses: schneegans/dynamic-badges-action@v1.7.0
       with:
-        token: ${{ secrets.CODECOV_TOKEN }}
-        files: ./coverage/lcov.info
-        flags: unittests
-        name: codecov-umbrella
-        fail_ci_if_error: false
+        auth: ${{ secrets.GIST_SECRET }}
+        gistID: 7a1c9f5e8b2d4e3f6g7h8i9j0k1l2m3n
+        filename: coverage-badge.json
+        label: Coverage
+        message: ${{ steps.coverage.outputs.percentage }}%
+        color: ${{ steps.coverage.outputs.percentage >= 80 && 'green' || steps.coverage.outputs.percentage >= 60 && 'yellow' || 'red' }}
+      if: github.ref == 'refs/heads/master'
+
+    - name: Upload coverage report as artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: coverage-report
+        path: coverage/

@@ -5,7 +5,7 @@
   "type": "module",
   "repository": {
     "type": "git",
-    "url": "https://github.com/suenot/deep-tinkoff-invest-api.git"
+    "url": "https://github.com/suenot/tinkoff-invest-etf-balancer-bot.git"
   },
   "keywords": [
     "trading",

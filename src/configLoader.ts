@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
-import { ProjectConfig, AccountConfig, ExchangeClosureBehavior, BuyRequiresTotalMarginalSellConfig } from './types.d';
+import { ProjectConfig, AccountConfig, ExchangeClosureBehavior, BuyRequiresTotalMarginalSellConfig, AnalysisConfig, OpenRouterConfig } from './types.d';
 
 class ConfigLoader {
   private static instance: ConfigLoader;
@@ -164,6 +164,11 @@ class ConfigLoader {
 
     // Validate and set diff configuration defaults
     this.validateDiffConfiguration(account);
+
+    // Validate confirmation configuration if present
+    if (account.analysis || account.confirmationThresholdRub !== undefined) {
+      this.validateConfirmationConfiguration(account);
+    }
   }
 
   public async updateAccountConfig(accountId: string, updates: Partial<AccountConfig>): Promise<void> {
@@ -341,36 +346,131 @@ class ConfigLoader {
     }
   }
 
-  private validateAnalysisConfig(analysisConfig: any): void {
+  private validateConfirmationConfiguration(account: AccountConfig): void {
+    // Validate confirmationThresholdRub
+    if (account.confirmationThresholdRub !== undefined) {
+      if (typeof account.confirmationThresholdRub !== 'number') {
+        throw new Error(
+          `Account ${account.id}: confirmationThresholdRub must be a number. ` +
+          `Got: ${typeof account.confirmationThresholdRub}`
+        );
+      }
+
+      if (!Number.isFinite(account.confirmationThresholdRub)) {
+        throw new Error(
+          `Account ${account.id}: confirmationThresholdRub must be a finite number. ` +
+          `Got: ${account.confirmationThresholdRub}`
+        );
+      }
+
+      if (account.confirmationThresholdRub < 0) {
+        throw new Error(
+          `Account ${account.id}: confirmationThresholdRub must be positive. ` +
+          `Got: ${account.confirmationThresholdRub}`
+        );
+      }
+    }
+
+    // Validate analysis configuration
+    if (account.analysis) {
+      this.validateAnalysisConfiguration(account.analysis, account.id);
+    }
+
+    // Log warning if confirmationThresholdRub is set but confirmation is not enabled
+    if (account.confirmationThresholdRub !== undefined &&
+        (!account.analysis?.openrouter?.requireConfirmationForLargeOrders)) {
+      console.log(
+        `Warning: Account ${account.id} has confirmationThresholdRub set to ${account.confirmationThresholdRub} ` +
+        `but analysis.openrouter.requireConfirmationForLargeOrders is not enabled. The threshold will have no effect.`
+      );
+    }
+  }
+
+  private validateAnalysisConfiguration(analysis: AnalysisConfig, accountId: string): void {
+    if (analysis.openrouter) {
+      this.validateOpenRouterConfig(analysis.openrouter, accountId);
+    }
+  }
+
+  private validateAnalysisConfig(analysis: AnalysisConfig): void {
     // Validate openrouter configuration
-    if (!analysisConfig.openrouter) {
-      throw new Error('analysis.openrouter configuration is required');
+    if (!analysis.openrouter) {
+      throw new Error('Analysis configuration must contain openrouter section');
     }
 
-    // Validate cache configuration
-    if (!analysisConfig.openrouter.cache) {
-      throw new Error('analysis.openrouter.cache configuration is required');
+    this.validateOpenRouterConfig(analysis.openrouter);
+  }
+
+  private validateOpenRouterConfig(openrouter: OpenRouterConfig, accountId?: string): void {
+    const contextPrefix = accountId ? `Account ${accountId}: ` : '';
+
+    // Validate enabled field - required
+    if (typeof openrouter.enabled !== 'boolean') {
+      throw new Error(`${contextPrefix}analysis.openrouter.enabled must be a boolean. Got: ` + typeof openrouter.enabled);
     }
 
-    const cacheConfig = analysisConfig.openrouter.cache;
+    // Validate optional model field
+    if (openrouter.model !== undefined && typeof openrouter.model !== 'string') {
+      throw new Error(`${contextPrefix}analysis.openrouter.model must be a string. Got: ` + typeof openrouter.model);
+    }
 
+    // Validate optional temperature field
+    if (openrouter.temperature !== undefined) {
+      if (typeof openrouter.temperature !== 'number') {
+        throw new Error(`${contextPrefix}analysis.openrouter.temperature must be a number. Got: ` + typeof openrouter.temperature);
+      }
+      if (!Number.isFinite(openrouter.temperature)) {
+        throw new Error(`${contextPrefix}analysis.openrouter.temperature must be a finite number. Got: ` + openrouter.temperature);
+      }
+      if (openrouter.temperature < 0.0 || openrouter.temperature > 2.0) {
+        throw new Error(`${contextPrefix}analysis.openrouter.temperature must be between 0.0 and 2.0. Got: ` + openrouter.temperature);
+      }
+    }
+
+    // Validate cache configuration if present
+    if (openrouter.cache !== undefined) {
+      this.validateCacheConfig(openrouter.cache, contextPrefix);
+    }
+
+    // Validate requireConfirmationForLargeOrders if present (account-level only)
+    if (accountId && openrouter.requireConfirmationForLargeOrders !== undefined) {
+      if (typeof openrouter.requireConfirmationForLargeOrders !== 'boolean') {
+        throw new Error(
+          `${contextPrefix}analysis.openrouter.requireConfirmationForLargeOrders must be a boolean. ` +
+          `Got: ${typeof openrouter.requireConfirmationForLargeOrders}`
+        );
+      }
+    }
+
+    // Validate apiKey if present (account-level only)
+    if (accountId && openrouter.apiKey !== undefined) {
+      if (typeof openrouter.apiKey !== 'string') {
+        throw new Error(
+          `${contextPrefix}analysis.openrouter.apiKey must be a string. ` +
+          `Got: ${typeof openrouter.apiKey}`
+        );
+      }
+    }
+  }
+
+  private validateCacheConfig(cacheConfig: any, contextPrefix: string = ''): void {
     // Validate enabled field
     if (typeof cacheConfig.enabled !== 'boolean') {
-      throw new Error(`analysis.openrouter.cache.enabled must be a boolean. Got: ${typeof cacheConfig.enabled}`);
+      throw new Error(`${contextPrefix}analysis.openrouter.cache.enabled must be a boolean. Got: ${typeof cacheConfig.enabled}`);
     }
 
     // Validate ttl_hours field
     if (typeof cacheConfig.ttl_hours !== 'number') {
-      throw new Error(`analysis.openrouter.cache.ttl_hours must be a number. Got: ${typeof cacheConfig.ttl_hours}`);
+      throw new Error(`${contextPrefix}analysis.openrouter.cache.ttl_hours must be a number. Got: ${typeof cacheConfig.ttl_hours}`);
     }
 
     if (!Number.isFinite(cacheConfig.ttl_hours)) {
-      throw new Error(`analysis.openrouter.cache.ttl_hours must be a finite number. Got: ${cacheConfig.ttl_hours}`);
+      throw new Error(`${contextPrefix}analysis.openrouter.cache.ttl_hours must be a finite number. Got: ${cacheConfig.ttl_hours}`);
     }
 
     // TTL should be between 1 hour and 8760 hours (1 year)
     if (cacheConfig.ttl_hours < 1 || cacheConfig.ttl_hours > 8760) {
-      throw new Error(`analysis.openrouter.cache.ttl_hours must be between 1 and 8760 hours. Got: ${cacheConfig.ttl_hours}`);
+      throw new Error(`${contextPrefix}analysis.openrouter.cache.ttl_hours must be between 1 and 8760 hours. Got: ${cacheConfig.ttl_hours}`);
     }
   }
 
