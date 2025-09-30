@@ -58,6 +58,11 @@ export const provider = async (options?: { runOnce?: boolean; accountId?: string
 
 
 
+// Export the functions from different modules
+export { getLastPrice, getInstruments, getLastPrices, isExchangeOpenNow } from './marketData';
+export { generateOrders, generateOrdersSequential, generateOrder } from './orderManager';
+export { getAccountConfigById, getAccountId } from './accountUtils';
+
 export const getPositionsCycle = async (options?: { runOnce?: boolean }, accountConfig?: any, sdkObjects?: any) => {
   return await new Promise<void>((resolve) => {
     let count = 1;
